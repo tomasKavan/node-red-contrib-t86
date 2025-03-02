@@ -1,0 +1,85 @@
+<script type="text/javascript" id="foxtron-dali-ballast">
+  RED.nodes.registerType('foxtron-dali-ballast', {
+    category: 'DALI',
+    color: '#e2b784',
+    inputs: 1,
+    outputs: 2,
+    outputLabels: ['Serial communication', 'Feedback channel'],
+    icon: '../assets/node.svg',
+    defaults: {
+      name : { value: '' },
+      addresstype : { value: 7 },
+      addressval : { value: '' },
+      minlevel : { value: 0 },
+      maxlevel : { value: 255 },  
+      fadestep : { value: 1 },      
+    },
+    label: function () {
+      return this.name || 'Foxtron DALI Ballast'
+    },
+    oneditprepare: () => {
+      $("#node-input-addressval").typedInput({
+        type:"num"
+      })
+    }
+  })
+</script>
+
+<script type="text/html" data-template-name="foxtron-dali-ballast">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Name" />
+  </div>
+  <div class="form-row">
+    <table width="100%">
+      <tr style="line-height: 10px;">
+        <td width="100px" style="font-size:14px; width: 100px;">
+          <i class="fa fa-wrench"></i> <span>Address</span>
+        </td>
+        <td>Type</td>
+        <td>Value</td>
+      </tr>
+      <tr>
+        <td></td>
+        <td style="padding-right: 4px;">
+          <select type="text" id="node-input-addresstype" style="height: 34px;">
+            <option value="7">Broadcast</option>
+            <option value="4">Group</option>
+            <option value="0">Short</option>
+          </select>
+        </td>
+        <td>
+          <input type="text" id="node-input-addressval" placeholder="Address" />
+        </td>
+      </tr>
+    </table>
+  </div>
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Min Level</label>
+    <input type="text" id="node-input-minlevel" placeholder="0-254" />
+  </div>
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Max. Level</label>
+    <input type="text" id="node-input-maxlevel" placeholder="0-254" />
+  </div>
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Fade Step</label>
+    <input type="text" id="node-input-fadestep" placeholder="Fade Step" />
+  </div>
+</script>
+
+<script type="text/html" data-help-name="foxtron-dali-ballast">
+  <p>Foxtron DALI ballast node</p>
+  <h3>Inputs</h3>
+  <dl class="message-properties">
+  <dt>payload
+      <span class="property-type">string</span>
+  </dt>
+  <h3>Outputs</h3>
+  <dl class="message-properties">
+  <dt>payload
+      <span class="property-type">string</span>
+  </dt>
+  <h3>Details</h3>
+  <p>TODO</p>
+</script>
