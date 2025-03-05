@@ -10,16 +10,44 @@
       name : { value: '' },
       addresstype : { value: 7 },
       addressval : { value: '' },
-      minlevel : { value: 0 },
-      maxlevel : { value: 255 },  
-      fadestep : { value: 1 },      
+      minlevel : { 
+        value: 0,  
+        validate: function(v) {
+          v = parseInt(v)
+          if (isNaN(v)) return true
+          const maxEl = $("#node-input-maxlevel")
+          const max = parseInt(maxEl ? maxEl.val() : '')
+          return v > 0 && v < 255 && (isNaN(max) || v < max)
+        }
+      },
+      maxlevel : { 
+        value: 255,  
+        validate: function(v) {
+          v = parseInt(v)
+          if (isNaN(v)) return true
+          const minEl = $("#node-input-minlevel")
+          const min = parseInt(minEl ? minEl.val() : '')
+          return v > 0 && v < 255 && (isNaN(min) || v > min)
+        }
+      },  
+      faderate : { value: '15' },      
     },
     label: function () {
       return this.name || 'Foxtron DALI Ballast'
     },
     oneditprepare: () => {
-      $("#node-input-addressval").typedInput({
-        type:"num"
+      $("#node-input-addressval").typedInput({ type:"num" })
+      $("#node-input-minlevel").typedInput({ type:"num" })
+      $("#node-input-maxlevel").typedInput({ type:"num" })
+
+      const slct = $("#node-input-addresstype")
+      console.log(slct)
+      slct.on('change', () => {
+        if (slct.val() === '7') {
+          $("#node-input-addressval").typedInput('disable')
+        } else {
+          $("#node-input-addressval").typedInput('enable')
+        }
       })
     }
   })
@@ -55,16 +83,32 @@
     </table>
   </div>
   <div class="form-row">
-    <label for="node-input-name"><i class="fa fa-tag"></i> Min Level</label>
+    <label for="node-input-minlevel"><i class="fa fa-tag"></i> Min Level</label>
     <input type="text" id="node-input-minlevel" placeholder="0-254" />
   </div>
   <div class="form-row">
-    <label for="node-input-name"><i class="fa fa-tag"></i> Max. Level</label>
+    <label for="node-input-maxlevel"><i class="fa fa-tag"></i> Max. Level</label>
     <input type="text" id="node-input-maxlevel" placeholder="0-254" />
   </div>
   <div class="form-row">
-    <label for="node-input-name"><i class="fa fa-tag"></i> Fade Step</label>
-    <input type="text" id="node-input-fadestep" placeholder="Fade Step" />
+    <label for="node-input-faderate"><i class="fa fa-tag"></i> Fade Rate</label>
+    <select type="text" id="node-input-faderate" style="height: 34px;">
+      <option value="1">357.796 steps/s</option>
+      <option value="2">253.000 steps/s</option>
+      <option value="3">178.898 steps/s</option>
+      <option value="4">126.500 steps/s</option>
+      <option value="5">89.449 steps/s</option>
+      <option value="6">63.250 steps/s</option>
+      <option value="7">44.725 steps/s</option>
+      <option value="8">31.625 steps/s</option>
+      <option value="9">22.362 steps/s</option>
+      <option value="10">15.813 steps/s</option>
+      <option value="11">11.181 steps/s</option>
+      <option value="12">7.906 steps/s</option>
+      <option value="13">5.591 steps/s</option>
+      <option value="14">3.953 steps/s</option>
+      <option value="15">2.795 steps/s</option>
+    </select>
   </div>
 </script>
 

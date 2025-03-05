@@ -1,11 +1,30 @@
 import { Node, NodeAPI, NodeContext, NodeDef } from "node-red"
 import { config } from "process"
-import { Address, AddressType, Command, DALI_FADE_STEP_DURATION_MS, DALI_MAX_FADE_RATE, DALI_MIN_FADE_RATE, MAX_DALI_LEVEL, MIN_DALI_LEVEL, Opcode } from "../foxtron-types"
+import { 
+  Address, 
+  AddressType, 
+  Command, 
+  DALI_FADE_STEP_DURATION_MS, 
+  DALI_MAX_FADE_RATE_N, 
+  DALI_MIN_FADE_RATE_N,
+  fadeRateSteps, 
+  MAX_DALI_LEVEL, 
+  MIN_DALI_LEVEL, 
+  Opcode 
+} from "../foxtron-types"
 import { foxtronDaliFrame } from "../foxtron-serial-frame"
+import { equal } from "assert"
 
 interface FoxtronDaliBallastNodeConfig extends NodeDef {
-  topic: string
+  name: string,
+  addresstype: string,
+  addressval: string,
+  minlevel: string,
+  maxlevel: string,
+  faderate: string
 }
+
+const SEC_MS = 1000
 
 enum Key {
   LastState = 'LAST_STATE'
@@ -35,14 +54,23 @@ type LevelBouds = {
   max: number
 }
 
-type State = {
+type ParsedConfig = {
   address: Address,
   levelBounds: LevelBouds,
-  levelsPerFadeStep: number
+  fadeRate: number,
+  fadeLevelPerStep: number
+}
+
+type StoreState = {
+  config: ParsedConfig
   level: number,
   isOn: boolean,
-  fadeAction: FadeAction
+  fadeAction: FadeAction,
+  fadeStepCntr: number,
+  fadeStartLevel: number
 }
+
+type SendMsg = (msg: any) => void
 
 const eventWithString = (str: any): Event => {
   if (str && str.event) str = str.event
@@ -58,25 +86,22 @@ const intWithPayload = (pld: any): number | null => {
   return null
 }
 
-const addressResolv = (config: any): Address => {
+const addressResolv = (config: FoxtronDaliBallastNodeConfig): Address => {
   const addr = {
     type: AddressType.Broadcast,
     value: 0
   }
   if (config && typeof config.addresstype !== 'undefined') {
-    if (typeof config.addresstype === 'string') config.addresstype = parseInt(config.addresstype)
-    if (config.addresstype !== null 
-      && !isNaN(config.addresstype) 
-      && Object.values(AddressType).includes(config.addresstype as AddressType)
-    ) {
-      addr.type = config.addresstype as AddressType
+    const atype = (typeof config.addresstype === 'string') ? parseInt(config.addresstype) : config.addresstype
+    if (!isNaN(atype) && Object.values(AddressType).includes(atype as AddressType)) {
+      addr.type = atype
       if (addr.type !== AddressType.Broadcast 
         && config.addressval !== null 
         && typeof config.addressval !== 'undefined'
       ) {
-        if (typeof config.addressval === 'string') config.addressval = parseInt(config.addressval)
-        if (!isNaN(config.addressval)) {
-          addr.value = config.addressval
+        addr.value = (typeof config.addressval === 'string') ? parseInt(config.addressval) : config.addressval
+        if (isNaN(addr.value)) {
+          addr.value = 0
         }
       }
     }
@@ -85,237 +110,322 @@ const addressResolv = (config: any): Address => {
   return addr
 }
 
-const levelBoundsResolv = (config: any): LevelBouds => {
+const levelBoundsResolv = (config: FoxtronDaliBallastNodeConfig): LevelBouds => {
   const bl = {
-    min: config.minlevel,
-    max: config.maxlevel
+    min: parseInt(config.minlevel),
+    max: parseInt(config.maxlevel)
   }
-  if (typeof bl.min === 'string') bl.min = parseInt(bl.min)
-  if (typeof bl.max === 'string') bl.max = parseInt(bl.max)
   if (typeof bl.min === 'undefined' || isNaN(bl.min) || bl.min < MIN_DALI_LEVEL) bl.min = MIN_DALI_LEVEL
   if (typeof bl.max === 'undefined' || isNaN(bl.max) || bl.max > MAX_DALI_LEVEL) bl.min = MAX_DALI_LEVEL
   return bl
 }
 
-const levelsPerFadestepResolv = (config: any): number => {
-  let fadeStep = config.fadestep
-  if (typeof fadeStep === 'string') fadeStep = parseInt(fadeStep)
-  if (!fadeStep || isNaN(fadeStep) || fadeStep < DALI_MIN_FADE_RATE) fadeStep = DALI_MIN_FADE_RATE
-  if (fadeStep > DALI_MAX_FADE_RATE) fadeStep = DALI_MAX_FADE_RATE
-  return fadeStep
+const fadeRateResolv = (config: FoxtronDaliBallastNodeConfig): number => {
+  let fadeRate = parseInt(config.faderate)
+  if (!fadeRate || isNaN(fadeRate) || fadeRate < DALI_MIN_FADE_RATE_N) fadeRate = DALI_MIN_FADE_RATE_N
+  if (fadeRate > DALI_MAX_FADE_RATE_N) fadeRate = DALI_MAX_FADE_RATE_N
+  return fadeRate
 }
 
-const loadLastState = (ctx: NodeContext, config: any): State => {
-  let saved: any = ctx.get(Key.LastState)
-  if (!saved) {
-    saved = {
+const calcFadeLevelsPerStep = (rate: number): number => {
+  return (fadeRateSteps(rate) || 1) / SEC_MS * DALI_FADE_STEP_DURATION_MS
+}
+
+function parsetConfigEqual(pc1: ParsedConfig, pc2: ParsedConfig): boolean {
+  return (
+    pc1.fadeRate === pc2.fadeRate 
+    && pc1.levelBounds.min === pc2.levelBounds.min
+    && pc1.levelBounds.max === pc2.levelBounds.max 
+    && pc1.address.type === pc2.address.type
+    && (pc1.address.type !== AddressType.Broadcast || pc1.address.value === pc2.address.value)
+  )
+}
+
+class FoxtronDaliBallast {
+  private RED: NodeAPI
+  private node: Node
+  private pConf: ParsedConfig
+  private nctx: NodeContext
+  private level!: number
+  private isOn!: boolean
+  private fadeAction!: FadeAction
+  private fadeStepCntr!: number
+  private fadeStartLevel!: number
+
+  constructor(RED: NodeAPI, node: Node, config: FoxtronDaliBallastNodeConfig) {
+    this.RED = RED
+    this.node = node
+    RED.nodes.createNode(node, config)
+
+    // Parse node config set in settings pane
+    const fr = fadeRateResolv(config)
+    this.pConf = {
       address: addressResolv(config),
       levelBounds: levelBoundsResolv(config),
-      levelsPerFadeStep: levelsPerFadestepResolv(config),
-      level: 0,
-      isOn: false,
-      fadeAction: FadeAction.None
+      fadeRate: fr,
+      fadeLevelPerStep: calcFadeLevelsPerStep(fr)
     }
-    ctx.set(Key.LastState, saved)
-  }
-  return saved as State
-}
 
-const storeNewState = (ctx: NodeContext, state: State) => {
-  ctx.set(Key.LastState, state)
-}
-
-type SendToBallast = (cmd: Command) => void
-
-const stopFade = (ls: State, send: SendToBallast): boolean => {
-  if (ls.fadeAction === FadeAction.Down || ls.fadeAction === FadeAction.Up) {
-    ls.fadeAction = FadeAction.StopRequested
-    setLevel(ls, ls.level, send)
-    return true
-  }
-  return false
-}
-
-const setOff = (ls: State, send: SendToBallast) => {
-  stopFade(ls, send)
-
-  send({
-    opcode: Opcode.OFF,
-    address: ls.address
-  })
-
-  ls.isOn = false
-  ls.level = ls.levelBounds.min
-}
-
-const setMax = (ls: State, send: SendToBallast) => {
-  stopFade(ls, send)
-
-  send({
-    opcode: Opcode.RECALL_MAX_LEVEL,
-    address: ls.address
-  })
-
-  ls.isOn = true
-  ls.level = ls.levelBounds.max
-}
-
-const setMin = (ls: State, send: SendToBallast) => {
-  stopFade(ls, send)
-
-  send({
-    opcode: Opcode.RECALL_MIN_LEVEL,
-    address: ls.address
-  })
-
-  ls.isOn = true
-  ls.level = ls.levelBounds.min
-}
-
-const toggle = (ls: State, send: SendToBallast) => {
-  stopFade(ls, send)
-
-  if (!ls.isOn || ls.level !== ls.levelBounds.max) {
-    setMax(ls, send)
-  } else {
-    setOff(ls, send)
-  }
-}
-
-const startFadeUp = (ls: State, send: SendToBallast, tick: Tick) => {
-  const lact = ls.fadeAction
-
-  if (!ls.isOn) {
-    setMin(ls, send)
+    // Load last state and if it's there and config in it doesn't match the parsed one
+    // get rid of the last state
+    this.nctx = this.node.context()
+    this.refreshState()
+    
+    this.node.on('input', this.onInput.bind(this))
   }
 
-  ls.fadeAction = FadeAction.Up
-  if (lact === FadeAction.None) {
-    fadeStep(ls, send, tick)
-  }
-}
+  refreshState() {
+    let saved: StoreState | undefined = (this.nctx.get(Key.LastState) as StoreState)
+    if (!saved || !saved.config || !parsetConfigEqual(this.pConf, saved.config)) {
+      saved = {
+        level: 0,
+        isOn: false,
+        fadeAction: FadeAction.None,
+        fadeStepCntr: 0,
+        fadeStartLevel: 0,
+        config: this.pConf
+      }
+    }
 
-const startFadeDown = (ls: State, send: SendToBallast, tick: Tick) => {
-  const lact = ls.fadeAction
-
-  if (!ls.isOn) {
-    setMax(ls, send)
-  }
-
-  ls.fadeAction = FadeAction.Down
-  if (lact === FadeAction.None) {
-    fadeStep(ls, send, tick)
-  }
-}
-
-const resetBallastState = (ls: State, send: SendToBallast) => {
-  stopFade(ls, send)
-
-  if (!ls.isOn) {
-    setOff(ls, send)
-  } else {
-    setLevel(ls, ls.level, send)
-  }
-}
-
-const queryBallastState = (ls: State, send: SendToBallast) => {
-  throw new Error('Query Ballast state not implementd')
-}
-
-const setLevel = (ls: State, val: number, send: SendToBallast) => {
-  if (stopFade(ls, send)) {
-    return
+    this.level = saved.level
+    this.isOn = saved.isOn
+    this.fadeAction = saved.fadeAction
+    this.fadeStepCntr = saved.fadeStepCntr
+    this.fadeStartLevel = saved.fadeStartLevel
+    
+    this.storeState()
   }
 
-  send({
-    opcode: Opcode.DAPC,
-    address: ls.address,
-    value: val
-  })
-
-  ls.level = val
-  ls.isOn = !!val
-}
-
-type Tick = (evt?: Event, val?: number | null) => State
-
-const fadeStep = (ls: State, send: SendToBallast, tick: Tick) => {
-  if (ls.fadeAction === FadeAction.StopRequested) {
-    ls.fadeAction = FadeAction.None
-    return
+  serializeState(): StoreState {
+    return {
+      level: this.level,
+      isOn: this.isOn,
+      fadeAction: this.fadeAction,
+      fadeStepCntr: this.fadeStepCntr,
+      fadeStartLevel: this.fadeStartLevel,
+      config: this.pConf
+    }
   }
 
-  const step = Math.round(ls.levelsPerFadeStep / 1000 * DALI_FADE_STEP_DURATION_MS)
-  if (ls.fadeAction === FadeAction.Up) {
-    ls.level = Math.min(ls.levelBounds.max, ls.level + step)
-    send({
-      opcode: Opcode.UP,
-      address: ls.address
-    })
+  storeState() {
+    this.nctx.set(Key.LastState, this.serializeState())
+  }
+
+  // Tick function get called each time some even happen, like:
+  // - a message arrived,
+  // - a fade timer occured
+  private tick(send: SendMsg, evt?: Event, val?: number | null) {
+    this.refreshState()
+
+    if (!evt) {
+      this.fadeStep(send)
+    } else {
+      switch (evt) {
+        case Event.Off: this.setOff(send); break
+        case Event.Max: this.setMax(send); break
+        case Event.Toggle: this.toggle(send); break
+        case Event.FadeUp: this.startFadeUp(send); break
+        case Event.FadeDown: this.startFadeDown(send); break
+        case Event.FadeStop: this.stopFade(send); break
+        case Event.Reset: this.resetBallastState(send); break
+        case Event.Query: this.queryBallastState(send); break
+        case Event.SetLevel: this.setLevel(send, val || 0); break
+      }
+    }
+
+    this.storeState()
+  }
+
+  // React to incoming message
+  private onInput(msg: any, send: SendMsg, done: () => void) {
+    // Event might be in topic or in payload, some events might have value. It's in 
+    // payload or payload.value.
+    const event = eventWithString(msg.topic || msg.payload)
+    const value: number | null = event === Event.SetLevel ? intWithPayload(msg.payload) : null
+  
+    this.tick(send, event, value)
+
+    msg.payload = this.serializeState()
+    delete msg.topic
+    send([null, msg])
+    
+    if (done) done()
+  }
+
+  private sendToBallast(send: SendMsg, cmd: Command) {
+    send([{
+      payload: foxtronDaliFrame(cmd)
+    }, null])
+  }
+
+  private stopFade(send: SendMsg): boolean {
+    if (this.fadeAction === FadeAction.Down || this.fadeAction === FadeAction.Up) {
+      this.fadeAction = FadeAction.StopRequested
+      this.setLevel(send, this.level)
+      return true
+    }
+    return false
   }
   
-  if (ls.fadeAction === FadeAction.Down) {
-    ls.level = Math.max(ls.levelBounds.min, ls.level - step)
-    send({
-      opcode: Opcode.DOWN,
-      address: ls.address
+  private setOff(send: SendMsg) {
+    this.stopFade(send)
+  
+    this.sendToBallast(send, {
+      opcode: Opcode.OFF,
+      address: this.pConf.address
     })
+  
+    this.isOn = false
+    this.level = this.pConf.levelBounds.min
   }
-
-  setTimeout(tick, DALI_FADE_STEP_DURATION_MS)
-}
-
-
-export default function main(RED: NodeAPI) {
-  function FoxtronDaliBallast(this: Node, config: FoxtronDaliBallastNodeConfig) {
-    RED.nodes.createNode(this, config)
-
-    const tick: Tick = (evt?: Event, val?: number | null): State => {
-      const ctx = this.context()
-      let lastState: State = loadLastState(ctx, config) 
-
-      const send: SendToBallast = (cmd: Command) => {
-        this.send([{
-          payload: foxtronDaliFrame(cmd)
-        }, null])
-      } 
-
-      if (!evt) {
-        fadeStep(lastState, send, tick)
-      } else {
-        switch (evt) {
-          case Event.Off: setOff(lastState, send); break
-          case Event.Max: setMax(lastState, send); break
-          case Event.Toggle: toggle(lastState, send); break
-          case Event.FadeUp: startFadeUp(lastState, send, tick); break
-          case Event.FadeDown: startFadeDown(lastState, send, tick); break
-          case Event.FadeStop: stopFade(lastState, send); break
-          case Event.Reset: resetBallastState(lastState, send); break
-          case Event.Query: queryBallastState(lastState, send); break
-          case Event.SetLevel: setLevel(lastState, val || 0, send); break
-        }
-      }
-
-      storeNewState(ctx, lastState)
-      return lastState
+  
+  private setMax(send: SendMsg) {
+    this.stopFade(send)
+  
+    this.sendToBallast(send, {
+      opcode: Opcode.RECALL_MAX_LEVEL,
+      address: this.pConf.address
+    })
+  
+    this.isOn = true
+    this.level = this.pConf.levelBounds.max
+  }
+  
+  private setMin(send: SendMsg) {
+    this.stopFade(send)
+  
+    this.sendToBallast(send, {
+      opcode: Opcode.RECALL_MIN_LEVEL,
+      address: this.pConf.address
+    })
+  
+    this.isOn = true
+    this.level = this.pConf.levelBounds.min
+  }
+  
+  private toggle(send: SendMsg) {
+    this.stopFade(send)
+  
+    if (!this.isOn || this.level !== this.pConf.levelBounds.max) {
+      this.setMax(send)
+    } else {
+      this.setOff(send)
+    }
+  }
+  
+  private startFadeUp(send: SendMsg)  {
+    const lact = this.fadeAction
+  
+    if (!this.isOn) {
+      this.setMin(send)
+    }
+  
+    this.fadeAction = FadeAction.Up
+    this.fadeStepCntr = 0
+    this.fadeStartLevel = this.level
+    if (lact === FadeAction.None || lact === FadeAction.StopRequested) {
+      this.fadeStep(send)
+    }
+  }
+  
+  private startFadeDown(send: SendMsg) {
+    const lact = this.fadeAction
+  
+    if (!this.isOn) {
+      this.setMax(send)
+    }
+  
+    this.fadeAction = FadeAction.Down
+    this.fadeStepCntr = 0
+    this.fadeStartLevel = this.level
+    if (lact === FadeAction.None || lact === FadeAction.StopRequested) {
+      this.fadeStep(send)
+    }
+  }
+  
+  resetBallastState(send: SendMsg) {
+    this.stopFade(send)
+  
+    if (!this.isOn) {
+      this.setOff(send)
+    } else {
+      this.setLevel(send, this.level)
+    }
+  }
+  
+  private queryBallastState = (send: SendMsg) => {
+    throw new Error('Query Ballast state not implementd')
+  }
+  
+  private setLevel = (send: SendMsg, val: number) => {
+    if (this.stopFade(send)) {
+      return
     }
 
-    this.on('input', (msg:any, send, done) => {
-    
-      const event = eventWithString(msg.topic || msg.payload)
-      const value: number | null = event === Event.SetLevel ? intWithPayload(msg.payload) : null
-    
-      const state = tick(event, value)
+    if (val > this.pConf.levelBounds.max) val = this.pConf.levelBounds.max
+    if (val !== 0) {
+      if (val < this.pConf.levelBounds.min) val = this.pConf.levelBounds.min
+    }
 
-      msg.payload = state
-      delete msg.topic
-      send([null, msg])
-      
-      if (done) done()
-    })
+    if (val === 0) {
+      this.sendToBallast(send, {
+        opcode: Opcode.OFF,
+        address: this.pConf.address
+      })
+    } else {
+      this.sendToBallast(send, {
+        opcode: Opcode.DAPC,
+        address: this.pConf.address,
+        value: val
+      })
+    }
 
-    
+    this.level = val
+    this.isOn = !!val
   }
 
-  RED.nodes.registerType('foxtron-dali-ballast', FoxtronDaliBallast)
+  private fadeStep(send: SendMsg) {
+    if (this.fadeAction === FadeAction.StopRequested) {
+      this.fadeAction = FadeAction.None
+      return
+    }
+  
+    const origLevel = this.level
+    if (this.fadeAction === FadeAction.Up) {
+      this.fadeStepCntr += 1 
+      this.level = Math.min(
+        this.pConf.levelBounds.max, 
+        this.fadeStartLevel + Math.round(this.pConf.fadeLevelPerStep * this.fadeStepCntr)
+      )
+      this.node.warn(`Ctr: ${this.fadeStepCntr}; Level: ${this.level}`)
+      if (origLevel < this.pConf.levelBounds.max) {
+        this.sendToBallast(send, {
+          opcode: Opcode.UP,
+          address: this.pConf.address
+        })
+      }
+    }
+    
+    if (this.fadeAction === FadeAction.Down) {
+      this.fadeStepCntr += 1
+      this.level = Math.max(
+        this.pConf.levelBounds.min, 
+        this.fadeStartLevel - Math.round(this.pConf.fadeLevelPerStep * this.fadeStepCntr)
+      )
+      if (origLevel > this.pConf.levelBounds.min) {
+        this.sendToBallast(send, {
+          opcode: Opcode.DOWN,
+          address: this.pConf.address
+        })
+      }
+    }
+  
+    setTimeout(this.tick.bind(this, send), DALI_FADE_STEP_DURATION_MS)
+  }
+}
+
+export default function main(RED: NodeAPI) {
+  RED.nodes.registerType('foxtron-dali-ballast', function(this: Node, config: FoxtronDaliBallastNodeConfig) {
+    new FoxtronDaliBallast(RED, this, config)
+  })
 }
