@@ -36,17 +36,13 @@
       return this.name || 'Foxtron DALI Ballast'
     },
     oneditprepare: () => {
-      $("#node-input-addressval").typedInput({ type:"num" })
-      $("#node-input-minlevel").typedInput({ type:"num" })
-      $("#node-input-maxlevel").typedInput({ type:"num" })
-
       const slct = $("#node-input-addresstype")
       console.log(slct)
       slct.on('change', () => {
         if (slct.val() === '7') {
-          $("#node-input-addressval").typedInput('disable')
+          $("#node-input-addressval").prop('disabled', true)
         } else {
-          $("#node-input-addressval").typedInput('enable')
+          $("#node-input-addressval").prop('disabled', false)
         }
       })
     }
@@ -54,45 +50,102 @@
 </script>
 
 <script type="text/html" data-template-name="foxtron-dali-ballast">
-  <div class="form-row">
-    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
-    <input type="text" id="node-input-name" placeholder="Name" />
+  <style>
+    .flex-form-row {
+      display: flex; 
+      flex-direction: row; 
+      flex-wrap: nowrap; 
+      gap: 4px;
+      align-items: center;
+    }
+
+    .red-ui-editor .flex-label {
+      width: 100px;
+      flex-grow: 0;
+      flex-shrink: 0;
+      margin-bottom: 0;
+    }
+
+    .red-ui-editor .flex-label.top {
+      align-self: flex-start;
+    }
+
+    .red-ui-editor .flex-label i {
+      min-width: 14px;
+    }
+
+    .flex-input {
+      flex-grow: 1;
+      flex-shrink: 0;
+    }
+
+    .flex-table-input-cell {
+      display: flex; 
+      flex-direction: column;
+      flex-grow: 1;
+      flex-shrink: 0;
+      flex-basis: 20%;
+    }
+
+    .flex-table-label {
+      flex-grow: 1;
+    }
+    
+    .red-ui-editor .flex-form-row input.flex-table-input, 
+    .red-ui-editor .flex-form-row select.flex-table-input {
+      flex-grow: 1;
+      width: 100%;
+    }
+
+    .flex-form-row-end-gap {
+      width: calc(30% - 108px);
+      flex-grow: 0;
+      flex-shrink: 0;
+    }
+  </style>
+
+  <div class="form-row flex-form-row">
+    <label class="flex-label" for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input class="flex-input" type="text" id="node-input-name" placeholder="Name" />
+    <div class="flex-form-row-end-gap">&nbsp;</div>
   </div>
-  <div class="form-row">
-    <table width="100%">
-      <tr style="line-height: 10px;">
-        <td width="100px" style="font-size:14px; width: 100px;">
-          <i class="fa fa-wrench"></i> <span>Address</span>
-        </td>
-        <td>Type</td>
-        <td>Value</td>
-      </tr>
-      <tr>
-        <td></td>
-        <td style="padding-right: 4px;">
-          <select type="text" id="node-input-addresstype" style="height: 34px;">
-            <option value="7">Broadcast</option>
-            <option value="4">Group</option>
-            <option value="0">Short</option>
-          </select>
-        </td>
-        <td>
-          <input type="text" id="node-input-addressval" placeholder="Address" />
-        </td>
-      </tr>
-    </table>
+
+  <!-- Address Bounds -->
+  <div class="form-row flex-form-row">
+    <div class="flex-label top"><i class="fa fa-qrcode"></i> Address</div>
+    <div class="flex-table-input-cell">
+      <span class="flex-table-label">Type</span>
+      <select class="flex-table-input" type="text" id="node-input-addresstype" style="height: 34px;">
+        <option value="7">Broadcast</option>
+        <option value="4">Group</option>
+        <option value="0">Short</option>
+      </select>
+    </div>
+    <div class="flex-table-input-cell" style="width: 50%;">
+      <span class="flex-table-label">Value</span>
+      <input class="flex-table-input" type="number" id="node-input-addressval" step="1" min="0" max="63" placeholder="Address" />
+    </div>
+    <div class="flex-form-row-end-gap">&nbsp;</div>
   </div>
-  <div class="form-row">
-    <label for="node-input-minlevel"><i class="fa fa-tag"></i> Min Level</label>
-    <input type="text" id="node-input-minlevel" placeholder="0-254" />
+
+  <!-- Level Bounds -->
+  <div class="form-row flex-form-row">
+    <div class="flex-label top"><i class="fa fa-arrows-v"></i> Bounds</div>
+    <div class="flex-table-input-cell">
+      <span class="flex-table-label">Min. Level</span>
+      <input class="flex-table-input" type="number" id="node-input-minlevel" step="1" min="0" max="254" placeholder="Min. Level" />
+    </div>
+    <div class="flex-table-input-cell">
+      <span class="flex-table-label">Max. Level</span>
+      <input class="flex-table-input" type="number" id="node-input-maxlevel" step="1" min="0" max="254" placeholder="Max. Level" />
+    </div>
+    <div class="flex-form-row-end-gap">&nbsp;</div>
   </div>
-  <div class="form-row">
-    <label for="node-input-maxlevel"><i class="fa fa-tag"></i> Max. Level</label>
-    <input type="text" id="node-input-maxlevel" placeholder="0-254" />
-  </div>
-  <div class="form-row">
-    <label for="node-input-faderate"><i class="fa fa-tag"></i> Fade Rate</label>
-    <select type="text" id="node-input-faderate" style="height: 34px;">
+
+  <!-- Fade Rate -->
+  <div class="form-row flex-form-row">
+    <label class="flex-label" for="node-input-faderate"><i class="fa fa-tag"></i> Fade Rate</label>
+    <select type="text" id="node-input-faderate" style="height: 34px;" class="flex-input">
       <option value="1">357.796 steps/s</option>
       <option value="2">253.000 steps/s</option>
       <option value="3">178.898 steps/s</option>
@@ -109,21 +162,61 @@
       <option value="14">3.953 steps/s</option>
       <option value="15">2.795 steps/s</option>
     </select>
+    <div class="flex-form-row-end-gap">&nbsp;</div>
   </div>
 </script>
 
-<script type="text/html" data-help-name="foxtron-dali-ballast">
-  <p>Foxtron DALI ballast node</p>
-  <h3>Inputs</h3>
-  <dl class="message-properties">
-  <dt>payload
-      <span class="property-type">string</span>
-  </dt>
-  <h3>Outputs</h3>
-  <dl class="message-properties">
-  <dt>payload
-      <span class="property-type">string</span>
-  </dt>
-  <h3>Details</h3>
-  <p>TODO</p>
+<script type="text/markdown" data-help-name="foxtron-dali-ballast">
+Controlls DALI Ballast connected to Foxtron Serial controller.
+
+### Inputs
+
+: *topic* (string) : String with event (list of supported events below). If not present in topic, event must be present in payload.
+: payload (any)    : String with event or object with `event` and `value` keys or number with value.
+
+### Outputs
+
+1. DALI Ballast Control
+: payload (string) : Command to controll ballast. Encoded to be send over serial line to Foxtron DALI232 or DALInet controllers.
+
+2. Ballast state
+: payload (object) : Object describing the actual status and configuration of the ballast.
+
+### Details
+
+#### Ballast state 
+`msg.payload.level` is integer 0-254 showing current brightness level of the ballast.
+
+`msg.payload.isOn` is boolean Current brightness level of the ballast
+
+`msg.payload.config` is object describing node's configuration like level bounds and fade rate.
+
+#### Node settings
+
+- **Level Bounds** - Boundary values of DALI ballast levels. If not filled the range is 0 - 254.
+- **Fade Rate** - DALI Fade Rate.
+
+#### Events
+
+- **off** - Turn Ballast Off (DALI: Off)
+- **max** - Turn Ballast On to Max level (DALI: Recall Max Level)
+- **toggle** - Toggle Ballast between Off and Max level
+- **up** - Start Fade Up sequence until stopped or Max level is reached
+- **down** -Start Fade Down sequence until stopp or Min level is reached (Ballast is not turned off)
+- **stop** - Stop current Fade sequence (or do nothing)
+- **set** - Set Ballast to specific level. The Required level should be in `msq.payload` or `msg.payload.value` as integer
+- **reset** - Set Ballast according to state saved to node context.
+- *query* - Query Ballast configuration. **Not implemented. Throws an exception. Don't send it.**
+
+#### Preserving State 
+Node is storing current state (current level and isOn) each time it's changes. After a flow is started, the last state can be recalled by sending a `reset` event.
+
+#### Foxtron
+Foxtron is a Czech company providing products to control various lightning systems. Foxtron [DALI232](https://www.foxtron.cz/en/e-shop/bus/dali/dali232) and [DALIInet](https://www.foxtron.cz/en/e-shop/bus/dali/dali2net) are handy DALI controllers with simple [ASCII based communication protocol](https://www.foxtron.cz/images/ke_stazeni/KomunikacniProtokol/DALI232-communication-protocol.pdf).
+
+#### DALI
+Digital Addressable Lightning Interface. Basic detail can be found on [Wikipedia](https://en.wikipedia.org/wiki/Digital_Addressable_Lighting_Interface)
+
+#### Implementaion details
+Node requires connection to Serial Out Node with configuration to connect to the controller. At the current version the node is not able to read configuration from the DALI ballast and it is fully dependend on node configuration. This should change in the future
 </script>
