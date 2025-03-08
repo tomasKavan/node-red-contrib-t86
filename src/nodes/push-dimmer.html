@@ -1,0 +1,151 @@
+<script type="text/javascript" id="push-dimmer">
+  const els = {
+    keyPath: null,
+    startVal: null,
+    stopVal: null
+  }
+
+  RED.nodes.registerType('push-dimmer', {
+    category: 'Foxtron DALI',
+    color: '#e2b784',
+    inputs: 1,
+    outputs: 1,
+    defaults: {
+      name : { value: '' },
+      dimmimpkp : { value: 'payload' },
+      dimmimpkpType : { value: undefined },
+      dimmimpstart : { value: 'start' },
+      dimmimpstartType : { value: undefined },
+      dimmimpstop : { value: 'stop' },
+      dimmimpstopType : { value: undefined }
+    },
+    paletteLabel: 'Push Dimmer',
+    label: function () {
+      return this.name || 'Push Dimmer'
+    },
+    oneditprepare: () => {
+      els.keyPath = $('#node-input-keypath'),
+      els.startVal = $('#node-input-dimmimpstart'),
+      els.stopVal = $('#node-input-dimmimpstop')
+      
+      els.keyPath.typedInput({
+          type:"msg",
+          types:["msg"],
+          typeField: "#node-input-keypathType"
+      })
+
+      els.startVal.typedInput({
+          type:"num",
+          types:["str","num","bool"],
+          typeField: "#node-input-dimmimpstartType"
+      })
+
+      els.stopVal.typedInput({
+          type:"num",
+          types:["str","num","bool"],
+          typeField: "#node-input-dimmimpstopType"
+      })
+    },
+    oneditresize: () => {
+      els.keyPath.typedInput('width', '100%')
+      els.startVal.typedInput('width', '100%')
+      els.stopVal.typedInput('width', '100%')
+    }
+  })
+</script>
+
+<script type="text/html" data-template-name="push-dimmer">
+  <style>
+    .flex-form-row {
+      display: flex; 
+      flex-direction: row; 
+      flex-wrap: nowrap; 
+      gap: 4px;
+      align-items: center;
+    }
+
+    .red-ui-editor .form-row label.flex-label, 
+    .red-ui-editor .form-row div.flex-label {
+      width: 120px;
+      flex-grow: 0;
+      flex-shrink: 0;
+      margin-bottom: 0;
+    }
+
+    .red-ui-editor .flex-label.top {
+      align-self: flex-start;
+    }
+
+    .red-ui-editor .form-row .flex-label.long {
+      width: auto;
+      flex-grow: 1;
+    }
+
+    .red-ui-editor .flex-label i {
+      min-width: 14px;
+    }
+
+    .flex-input {
+      flex-grow: 1;
+      flex-shrink: 0;
+    }
+
+    .flex-table-input-cell {
+      display: flex; 
+      flex-direction: column;
+      flex-grow: 1;
+      flex-shrink: 0;
+      flex-basis: 20%;
+    }
+
+    .flex-table-label {
+      flex-grow: 1;
+    }
+
+    .red-ui-editor .flex-form-row input.flex-table-input, 
+    .red-ui-editor .flex-form-row select.flex-table-input {
+      flex-grow: 1;
+      width: 100%;
+    }
+
+    .flex-form-row-end-gap {
+      width: calc(30% - 128px);
+      flex-grow: 0;
+      flex-shrink: 0;
+    }
+
+    .checkbox-right {
+      text-align: right;
+      width: 20px;
+      margin-right: 4px;
+    }
+  </style>
+
+  <div class="form-row flex-form-row">
+    <label class="flex-label" for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input class="flex-input" type="text" id="node-input-name" placeholder="Name" />
+    <div class="flex-form-row-end-gap">&nbsp;</div>
+  </div>
+
+  <!-- Input settings -->
+  <h3>Input Dimm Event</h3>
+  <div class="form-row flex-form-row">
+    <label class="flex-label" for="node-input-keypath"><i class="fa fa-tag"></i> Keypath</label>
+    <input class="flex-input" type="text" id="node-input-keypath" placeholder="payload" />
+    <input class="flex-input" type="hidden" id="node-input-keypathType" />
+    <div class="flex-form-row-end-gap">&nbsp;</div>
+  </div>
+  <div class="form-row flex-form-row">
+    <label class="flex-label" for="node-input-dimmimpstart"><i class="fa fa-tag"></i> Start Dimm</label>
+    <input class="flex-input" type="text" id="node-input-dimmimpstart" placeholder="1" />
+    <input class="flex-input" type="hidden" id="node-input-dimmimpstartType" />
+    <div class="flex-form-row-end-gap">&nbsp;</div>
+  </div>
+  <div class="form-row flex-form-row">
+    <label class="flex-label" for="node-input-dimmimpstop"><i class="fa fa-tag"></i> Stop Dimm</label>
+    <input class="flex-input" type="text" id="node-input-dimmimpstop" placeholder="0" />
+    <input class="flex-input" type="hidden" id="node-input-dimmimpstopType" />
+    <div class="flex-form-row-end-gap">&nbsp;</div>
+  </div>
+
+</script>

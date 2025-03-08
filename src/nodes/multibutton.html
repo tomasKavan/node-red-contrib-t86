@@ -1,0 +1,224 @@
+<script type="text/javascript" id="multibutton">
+  (function () {
+    const els = {
+      keyPath: null,
+      pushValue: null,
+      releaseValue: null
+    }
+
+    RED.nodes.registerType('multibutton', {
+      category: 'Foxtron DALI',
+      color: '#e2b784',
+      inputs: 1,
+      outputs: 1,
+      icon: '../assets/node.svg',
+      defaults: {
+        name: { value: '' },
+        shortpresslimitms: { value: '800' },
+        nextpresswaitms: { value: '200' },
+        inputkeypath: { value: 'payload' },
+        inputkeypathType: { value: undefined },
+        pushvalue: { value: '1' },
+        pushvalueType: { value: undefined },
+        releasevalue: { value: '0' },
+        releasevalueType: { value: undefined },
+        shortenabled: { value: true },
+        dblshortenabled: { value: false },
+        longenabled: { value: false },
+        shortlongenabled: { value: false },
+        warn: { value: false },
+        debug: { value: false }
+      },
+      paletteLabel: 'Multi Button',
+      label: function () {
+        return this.name || 'Multi Button'
+      },
+      oneditprepare: () => {
+        els.keyPath = $('#node-input-inputkeypath'),
+        els.pushValue = $('#node-input-pushvalue'),
+        els.releaseValue = $('#node-input-releasevalue')
+        
+        els.keyPath.typedInput({
+            type:"msg",
+            types:["msg"],
+            typeField: "#node-input-inputkeypathType"
+        })
+
+        els.pushValue.typedInput({
+            type:"num",
+            types:["str","num","bool"],
+            typeField: "#node-input-pushvalueType"
+        })
+
+        els.releaseValue.typedInput({
+            type:"num",
+            types:["str","num","bool"],
+            typeField: "#node-input-releasevalueType"
+        })
+      },
+      oneditresize: () => {
+        els.keyPath.typedInput('width', '100%')
+        els.pushValue.typedInput('width', '100%')
+        els.releaseValue.typedInput('width', '100%')
+      }
+    })
+  })()
+</script>
+
+<script type="text/html" data-template-name="multibutton">
+  <style>
+    .flex-form-row {
+      display: flex; 
+      flex-direction: row; 
+      flex-wrap: nowrap; 
+      gap: 4px;
+      align-items: center;
+    }
+
+    .red-ui-editor .form-row label.flex-label, 
+    .red-ui-editor .form-row div.flex-label {
+      width: 120px;
+      flex-grow: 0;
+      flex-shrink: 0;
+      margin-bottom: 0;
+    }
+
+    .red-ui-editor .flex-label.top {
+      align-self: flex-start;
+    }
+
+    .red-ui-editor .form-row .flex-label.long {
+      width: auto;
+      flex-grow: 1;
+    }
+
+    .red-ui-editor .flex-label i {
+      min-width: 14px;
+    }
+
+    .flex-input {
+      flex-grow: 1;
+      flex-shrink: 0;
+    }
+
+    .flex-table-input-cell {
+      display: flex; 
+      flex-direction: column;
+      flex-grow: 1;
+      flex-shrink: 0;
+      flex-basis: 20%;
+    }
+
+    .flex-table-label {
+      flex-grow: 1;
+    }
+
+    .red-ui-editor .flex-form-row input.flex-table-input, 
+    .red-ui-editor .flex-form-row select.flex-table-input {
+      flex-grow: 1;
+      width: 100%;
+    }
+
+    .flex-form-row-end-gap {
+      width: calc(30% - 128px);
+      flex-grow: 0;
+      flex-shrink: 0;
+    }
+
+    .checkbox-right {
+      text-align: right;
+      width: 20px;
+      margin-right: 4px;
+    }
+  </style>
+
+  <div class="form-row flex-form-row">
+    <label class="flex-label" for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input class="flex-input" type="text" id="node-input-name" placeholder="Name" />
+    <div class="flex-form-row-end-gap">&nbsp;</div>
+  </div>
+
+  <!-- Timeouts -->
+  <div class="form-row flex-form-row">
+    <div class="flex-label top"><i class="fa fa-arrows-v"></i> Timeouts</div>
+    <div class="flex-table-input-cell">
+      <span class="flex-table-label">Short press limit [ms]</span>
+      <input class="flex-table-input" type="number" id="node-input-shortpresslimitms" step="1" min="0" placeholder="Min. Level" />
+    </div>
+    <div class="flex-table-input-cell">
+      <span class="flex-table-label">Second press wait [ms]</span>
+      <input class="flex-table-input" type="number" id="node-input-nextpresswaitms" step="1" min="0" placeholder="Max. Level" />
+    </div>
+    <div class="flex-form-row-end-gap">&nbsp;</div>
+  </div>
+
+  <!-- Input settings -->
+  <h3>Input Event</h3>
+  <div class="form-row flex-form-row">
+    <label class="flex-label" for="node-input-inputkeypath"><i class="fa fa-tag"></i> Keypath</label>
+    <input class="flex-input" type="text" id="node-input-inputkeypath" placeholder="payload" />
+    <input class="flex-input" type="hidden" id="node-input-inputkeypathType" />
+    <div class="flex-form-row-end-gap">&nbsp;</div>
+  </div>
+  <div class="form-row flex-form-row">
+    <label class="flex-label" for="node-input-pushvalue"><i class="fa fa-tag"></i> Push Value</label>
+    <input class="flex-input" type="text" id="node-input-pushvalue" placeholder="1" />
+    <input class="flex-input" type="hidden" id="node-input-pushvalueType" />
+    <div class="flex-form-row-end-gap">&nbsp;</div>
+  </div>
+  <div class="form-row flex-form-row">
+    <label class="flex-label" for="node-input-releasevalue"><i class="fa fa-tag"></i> Release Value</label>
+    <input class="flex-input" type="text" id="node-input-releasevalue" placeholder="0" />
+    <input class="flex-input" type="hidden" id="node-input-releasevalueType" />
+    <div class="flex-form-row-end-gap">&nbsp;</div>
+  </div>
+
+  <!-- Enablers -->
+  <h3>Enablers</h3>
+  <div class="form-row flex-form-row">
+    <label class="flex-label long" for="node-input-shortenabled"><i class="fa fa-tag"></i> Short Press</label>
+    <div class="checkbox-right">
+      <input class="flex-input" type="checkbox" id="node-input-shortenabled" />
+    </div>
+    <div class="flex-form-row-end-gap">&nbsp;</div>
+  </div>
+  <div class="form-row flex-form-row">
+    <label class="flex-label long" for="node-input-dblshortenabled"><i class="fa fa-tag"></i> Double Press</label>
+    <div class="checkbox-right">
+      <input class="flex-input" type="checkbox" id="node-input-dblshortenabled" />
+    </div>
+    <div class="flex-form-row-end-gap">&nbsp;</div>
+  </div>
+  <div class="form-row flex-form-row">
+    <label class="flex-label long" for="node-input-longenabled"><i class="fa fa-tag"></i> Long Press</label>
+    <div class="checkbox-right">
+      <input class="flex-input" type="checkbox" id="node-input-longenabled" />
+    </div>
+    <div class="flex-form-row-end-gap">&nbsp;</div>
+  </div>
+  <div class="form-row flex-form-row">
+    <label class="flex-label long" for="node-input-shortlongenabled"><i class="fa fa-tag"></i> Short then Long Press</label>
+    <div class="checkbox-right">
+      <input class="flex-input" type="checkbox" id="node-input-shortlongenabled" />
+    </div>
+    <div class="flex-form-row-end-gap">&nbsp;</div>
+  </div>
+
+  <!-- Debugging -->
+  <h3>Debugging</h3>
+  <div class="form-row flex-form-row">
+    <label class="flex-label long" for="node-input-shortlongenabled"><i class="fa fa-tag"></i> Issue warnings</label>
+    <div class="checkbox-right">
+      <input class="flex-input" type="checkbox" id="node-input-warn" />
+    </div>
+    <div class="flex-form-row-end-gap">&nbsp;</div>
+  </div>
+  <div class="form-row flex-form-row">
+    <label class="flex-label long" for="node-input-shortlongenabled"><i class="fa fa-tag"></i> Issue debug meesages</label>
+    <div class="checkbox-right">
+      <input class="flex-input" type="checkbox" id="node-input-debug" />
+    </div>
+    <div class="flex-form-row-end-gap">&nbsp;</div>
+  </div>
+
+</script>

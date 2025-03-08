@@ -1,7 +1,7 @@
 <script type="text/javascript" id="foxtron-dali-ballast">
   RED.nodes.registerType('foxtron-dali-ballast', {
-    category: 'DALI',
-    color: '#e2b784',
+    category: 'Foxtron DALI',
+    color: '#02b784',
     inputs: 1,
     outputs: 2,
     outputLabels: ['Serial communication', 'Feedback channel'],
@@ -32,6 +32,7 @@
       },  
       faderate : { value: '15' },      
     },
+    paletteLabel: 'Foxtron DALI Ballast',
     label: function () {
       return this.name || 'Foxtron DALI Ballast'
     },
@@ -90,7 +91,7 @@
     .flex-table-label {
       flex-grow: 1;
     }
-    
+
     .red-ui-editor .flex-form-row input.flex-table-input, 
     .red-ui-editor .flex-form-row select.flex-table-input {
       flex-grow: 1;

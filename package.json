@@ -1,6 +1,6 @@
 {
   "name": "node-red-contrib-foxtron-dali",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A Node-RED node for DALI gear connected to Foxtron serial controllers.",
   "keywords": [
     "node-red",
@@ -16,8 +16,9 @@
   },
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc && npm run copy-html",
+    "build": "tsc && npm run copy-html && npm run copy-css",
     "copy-html": "copyfiles -u 1 \"src/**/*.html\" dist/",
+    "copy-css": "copyfiles -u 1 \"src/**/*.css\" dist/",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write src",
     "test": "jest",
@@ -38,7 +39,10 @@
   },
   "node-red": {
     "nodes": {
-      "foxtron-dali-ballast": "dist/nodes/foxtron-dali-ballast.js"
+      "foxtron-dali-ballast": "dist/nodes/foxtron-dali-ballast.js",
+      "multibutton": "dist/nodes/multibutton.js",
+      "push-dimmer": "dist/nodes/push-dimmer.js",
+      "dimm-light-dashboard2": "dist/nodes/dimm-light-dashboard2.js"
     }
   }
 }
