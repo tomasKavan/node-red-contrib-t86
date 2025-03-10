@@ -236,6 +236,8 @@ class FoxtronDaliBallast {
 
   // Store serialized state to context storage
   private storeState() {
+    const color = this.isOn ? 'green' : 'red'
+    this.node.status({ fill: color, shape: "ring", text:`Level: ${this.level}`})
     this.nctx.set(Key.LastState, this.serializeState())
   }
 

@@ -29,8 +29,6 @@ interface DB2Base extends Node {
   state: any
 }
 
-
-
 class DimmLightDashboard {
   private RED: NodeAPI
   private node: Node

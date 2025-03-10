@@ -2,7 +2,8 @@
   const els = {
     keyPath: null,
     startVal: null,
-    stopVal: null
+    stopVal: null,
+    toggleVal: null
   }
 
   RED.nodes.registerType('push-dimmer', {
@@ -12,26 +13,29 @@
     outputs: 1,
     defaults: {
       name : { value: '' },
-      dimmimpkp : { value: 'payload' },
+      dimmimpkp : { value: 'payload.event' },
       dimmimpkpType : { value: undefined },
-      dimmimpstart : { value: 'start' },
+      dimmimpstart : { value: 'out.long.start' },
       dimmimpstartType : { value: undefined },
-      dimmimpstop : { value: 'stop' },
-      dimmimpstopType : { value: undefined }
+      dimmimpstop : { value: 'out.long.end' },
+      dimmimpstopType : { value: undefined },
+      toggle : { value: 'out.short' },
+      toggleType : { value: undefined }
     },
     paletteLabel: 'Push Dimmer',
     label: function () {
       return this.name || 'Push Dimmer'
     },
     oneditprepare: () => {
-      els.keyPath = $('#node-input-keypath'),
+      els.keyPath = $('#node-input-dimmimpkp'),
       els.startVal = $('#node-input-dimmimpstart'),
       els.stopVal = $('#node-input-dimmimpstop')
+      els.toggleVal = $('#node-input-toggle')
       
       els.keyPath.typedInput({
           type:"msg",
           types:["msg"],
-          typeField: "#node-input-keypathType"
+          typeField: "#node-input-dimmimpkpType"
       })
 
       els.startVal.typedInput({
@@ -45,11 +49,18 @@
           types:["str","num","bool"],
           typeField: "#node-input-dimmimpstopType"
       })
+
+      els.toggleVal.typedInput({
+          type:"num",
+          types:["str","num","bool"],
+          typeField: "#node-input-toggleType"
+      })
     },
     oneditresize: () => {
       els.keyPath.typedInput('width', '100%')
       els.startVal.typedInput('width', '100%')
       els.stopVal.typedInput('width', '100%')
+      els.toggleVal.typedInput('width', '100%')
     }
   })
 </script>
@@ -130,9 +141,9 @@
   <!-- Input settings -->
   <h3>Input Dimm Event</h3>
   <div class="form-row flex-form-row">
-    <label class="flex-label" for="node-input-keypath"><i class="fa fa-tag"></i> Keypath</label>
-    <input class="flex-input" type="text" id="node-input-keypath" placeholder="payload" />
-    <input class="flex-input" type="hidden" id="node-input-keypathType" />
+    <label class="flex-label" for="node-input-dimmimpkp"><i class="fa fa-tag"></i> Keypath</label>
+    <input class="flex-input" type="text" id="node-input-dimmimpkp" placeholder="payload" />
+    <input class="flex-input" type="hidden" id="node-input-dimmimpkpType" />
     <div class="flex-form-row-end-gap">&nbsp;</div>
   </div>
   <div class="form-row flex-form-row">
@@ -145,6 +156,12 @@
     <label class="flex-label" for="node-input-dimmimpstop"><i class="fa fa-tag"></i> Stop Dimm</label>
     <input class="flex-input" type="text" id="node-input-dimmimpstop" placeholder="0" />
     <input class="flex-input" type="hidden" id="node-input-dimmimpstopType" />
+    <div class="flex-form-row-end-gap">&nbsp;</div>
+  </div>
+  <div class="form-row flex-form-row">
+    <label class="flex-label" for="node-input-toggle"><i class="fa fa-tag"></i> Toggle</label>
+    <input class="flex-input" type="text" id="node-input-toggle" placeholder="0" />
+    <input class="flex-input" type="hidden" id="node-input-toggleType" />
     <div class="flex-form-row-end-gap">&nbsp;</div>
   </div>
 

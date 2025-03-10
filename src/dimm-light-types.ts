@@ -13,6 +13,7 @@ export interface WProps extends NodeDef {
   order: number,
   width: number,
   height: number,
+  label: string,
   brightnessMin: number,
   brightnessMax: number,
   temperatureMin: number,

@@ -166,7 +166,7 @@ const onInput = (msg: any) => {
 }
 
 const onLoad = (msg: any, state: any) => {
-  console.log(`Load msg: ${msg}, state: ${state}`)
+  console.log(`Load msg: ${msg && JSON.stringify(msg)}, state: ${state}`)
 }
 
 const onDynProps = (msg: any) => {
@@ -174,13 +174,13 @@ const onDynProps = (msg: any) => {
   console.log(`Dyn props: ${JSON.stringify(msg)}`)
 }
 
-dataState(props.id)
+dataState(props.id, onInput, onLoad, onDynProps)
 
 </script>
 
 <template>
   <div class="dimmer-widget">
-    <div class="name">Test Light</div>
+    <div class="name">{{ props.props.label }}</div>
     <div class="status">{{ brightness }}%</div>
     <div 
       class="dimmer-bar" 

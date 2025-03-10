@@ -11,7 +11,8 @@ enum Dimming {
 
 enum Event {
   Start = 'start',
-  Stop = 'stop'
+  Stop = 'stop',
+  Toggle = 'toggle'
 }
 
 interface PushDimmerNodeConfig extends NodeDef {
@@ -21,6 +22,8 @@ interface PushDimmerNodeConfig extends NodeDef {
   dimmimpstartType: ValueType,
   dimmimpstop: string,
   dimmimpstopType: ValueType,
+  toggle: string,
+  toggleType: ValueType
 }
 
 type ParsedConfig = {
@@ -28,6 +31,7 @@ type ParsedConfig = {
   dimmImpKp: string,
   dimmImpStart: EditorType,
   dimmImpStop: EditorType,
+  toggle: EditorType
 }
 
 function parseEditorConfig(config: PushDimmerNodeConfig): ParsedConfig {  
@@ -35,7 +39,8 @@ function parseEditorConfig(config: PushDimmerNodeConfig): ParsedConfig {
     name: config.name,
     dimmImpKp: config.dimmimpkp,
     dimmImpStart: typedStrToValue(config.dimmimpstart, config.dimmimpstartType),
-    dimmImpStop: typedStrToValue(config.dimmimpstop, config.dimmimpstopType)
+    dimmImpStop: typedStrToValue(config.dimmimpstop, config.dimmimpstopType),
+    toggle: typedStrToValue(config.toggle, config.toggleType)
   }
 }
 
@@ -79,8 +84,8 @@ class PushDimmer {
       this.ballastState = {
         level: msg.payload.level,
         isOn: msg.payload.isOn,
-        min: msg.payloads.levelBounds.min,
-        max: msg.payloads.levelBounds.max
+        min: msg.payload.config.levelBounds.min,
+        max: msg.payload.config.levelBounds.max
       }
       this.updateStatus()
       return
@@ -113,14 +118,24 @@ class PushDimmer {
       return
     }
     if (evt === Event.Stop) {
+      this.dimming = Dimming.Off
       this.sendDimmingMsg(msg, send)
       return
+    }
+    if (this.dimming === Dimming.Off) {
+      this.sendToggleMsg(msg, send)
     }
   }
 
   private sendDimmingMsg(msg: any, send: SendMsg) {
     if (!msg) msg = {}
     msg.topic = this.dimming === Dimming.Off ? 'stop' : this.dimming
+    send(msg)
+  }
+
+  private sendToggleMsg(msg: any, send: SendMsg) {
+    if (!msg) msg = {}
+    msg.topic = 'toggle'
     send(msg)
   }
 
@@ -133,6 +148,7 @@ class PushDimmer {
     }
     if (obj === this.pConf.dimmImpStart) return Event.Start
     if (obj === this.pConf.dimmImpStop) return Event.Stop
+    if (obj === this.pConf.toggle) return Event.Toggle
     return undefined
   }
 

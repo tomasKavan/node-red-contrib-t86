@@ -7,37 +7,38 @@
     icon: '../assets/node.svg',
     defaults: {
       name: { value: ''},
+      label: { value: ''},
       group: { type: 'ui-group', required: true },
-      //order: { value: 0 },
-      // width: {
-      //   value: 0,
-      //   validate: function (v) {
-      //     const width = v || 0
-      //     const currentGroup = $('#node-input-group').val() || this.group
-      //     const groupNode = RED.nodes.node(currentGroup)
-      //     const valid = !groupNode || +width <= +groupNode.width
-      //     $('#node-input-size').toggleClass('input-error', !valid)
-      //     return valid
-      //   }
-      // },
-      //height: { value: 0 },
+      order: { value: 0 },
+      width: {
+        value: 0,
+        validate: function (v) {
+          const width = v || 0
+          const currentGroup = $('#node-input-group').val() || this.group
+          const groupNode = RED.nodes.node(currentGroup)
+          const valid = !groupNode || +width <= +groupNode.width
+          $('#node-input-size').toggleClass('input-error', !valid)
+          return valid
+        }
+      },
+      height: { value: 0 },
       brightnessMin: { value: 0 },
       brightnessMax: { value: 254 },
       temperatureMin: { value: 2700 },
       temperatureMax: { value: 4000 },
       wtype: { value: 'dimm' },
-      // passthru: { value: true }
+      passthru: { value: true }
     },
     paletteLabel: 'Dimm Light',
     label: function () {
       return this.name || 'Dimm Light'
     },
     oneditprepare: function () {
-      // $('#node-input-size').elementSizer({
-      //   width: '#node-input-width',
-      //   height: '#node-input-height',
-      //   group: '#node-input-group'
-      // })
+      $('#node-input-size').elementSizer({
+        width: '#node-input-width',
+        height: '#node-input-height',
+        group: '#node-input-group'
+      })
     }
   })
 </script>
@@ -55,19 +56,24 @@
     <input class="flex-input" type="text" id="node-input-group">
     <div class="flex-form-row-end-gap">&nbsp;</div>
   </div>
-  <!-- <div class="form-row flex-form-row">
+  <div class="form-row flex-form-row">
     <label class="flex-label"><i class="fa fa-object-group"></i> Size</label>
     <input type="hidden" id="node-input-width">
     <input type="hidden" id="node-input-height">
     <button class="editor-button" id="node-input-size"></button>
-  </div> -->
-  <!-- <div class="form-row flex-form-row">
+  </div>
+  <div class="form-row flex-form-row">
     <label class="flex-label long" for="node-input-passthru"><i class="fa fa-tag"></i> If msg arrives on input, emulate a button click</label>
     <div class="checkbox-right">
       <input class="flex-input" type="checkbox" id="node-input-passthru" />
     </div>
     <div class="flex-form-row-end-gap">&nbsp;</div>
-  </div> -->
+  </div>
+  <div class="form-row flex-form-row">
+    <label class="flex-label" for="node-input-label"><i class="fa fa-tag"></i> Label</label>
+    <input class="flex-input" type="text" id="node-input-label" placeholder="Label on Dashboard" />
+    <div class="flex-form-row-end-gap">&nbsp;</div>
+  </div>
 
   <!-- Type -->
   <div class="form-row flex-form-row">
