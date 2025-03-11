@@ -16,8 +16,6 @@ export interface WProps extends NodeDef {
   label: string,
   brightnessMin: number,
   brightnessMax: number,
-  temperatureMin: number,
-  temperatureMax: number
   wtype: WType,
   passthru: boolean
 }

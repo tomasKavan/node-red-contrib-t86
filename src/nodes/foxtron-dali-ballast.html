@@ -11,7 +11,7 @@
       addresstype : { value: 7 },
       addressval : { value: '' },
       minlevel : { 
-        value: 0,  
+        value: 1,  
         validate: function(v) {
           v = parseInt(v)
           if (isNaN(v)) return true
@@ -21,7 +21,7 @@
         }
       },
       maxlevel : { 
-        value: 255,  
+        value: 254,  
         validate: function(v) {
           v = parseInt(v)
           if (isNaN(v)) return true
@@ -134,11 +134,11 @@
     <div class="flex-label top"><i class="fa fa-arrows-v"></i> Bounds</div>
     <div class="flex-table-input-cell">
       <span class="flex-table-label">Min. Level</span>
-      <input class="flex-table-input" type="number" id="node-input-minlevel" step="1" min="0" max="254" placeholder="Min. Level" />
+      <input class="flex-table-input" type="number" id="node-input-minlevel" step="1" min="1" max="254" placeholder="Min. Level" />
     </div>
     <div class="flex-table-input-cell">
       <span class="flex-table-label">Max. Level</span>
-      <input class="flex-table-input" type="number" id="node-input-maxlevel" step="1" min="0" max="254" placeholder="Max. Level" />
+      <input class="flex-table-input" type="number" id="node-input-maxlevel" step="1" min="1" max="254" placeholder="Max. Level" />
     </div>
     <div class="flex-form-row-end-gap">&nbsp;</div>
   </div>

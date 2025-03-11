@@ -62,7 +62,8 @@ type ParsedConfig = {
 type StoreState = {
   config: ParsedConfig
   level: number,
-  isOn: boolean,
+  state: boolean,
+  lastDaliLevel: number // To
 }
 
 type SendMsg = (msg: any) => void
@@ -71,7 +72,6 @@ type SendMsg = (msg: any) => void
 // It searches topic and event keys. If they aren't present input string is used instead.
 const eventWithString = (str: any): Event => {
   if (str && str.event) str = str.event
-  if (str && str.topic) str = str.topic
   if (typeof str !== 'string') return Event.Query
   return Object.values(Event).includes(str as Event) ? (str as Event) : Event.Query
 }
@@ -79,6 +79,12 @@ const eventWithString = (str: any): Event => {
 // Helper to parse value from payload
 const intWithPayload = (pld: any): number | null => {
   if (pld && pld.value) pld = pld.value
+  if (typeof pld.state === 'boolean' && !pld.state) {
+    return 0
+  }
+  if (typeof pld.level === 'number') {
+    pld = pld.level
+  }
   if (typeof pld === 'string') pld = parseInt(pld)
   if (typeof pld === 'number' && !isNaN(pld)) return pld
   return null
@@ -214,13 +220,14 @@ class FoxtronDaliBallast {
     if (!saved || !saved.config || !parsetConfigEqual(this.pConf, saved.config)) {
       saved = {
         level: 0,
-        isOn: false,
+        state: false,
+        lastDaliLevel: 0,
         config: this.pConf
       }
     }
 
-    this.level = saved.level
-    this.isOn = saved.isOn
+    this.level = saved.level > 0 ? saved.level : saved.lastDaliLevel
+    this.isOn = saved.state
     
     this.storeState()
   }
@@ -228,8 +235,9 @@ class FoxtronDaliBallast {
   // Return serialized state of the current node
   private serializeState(): StoreState {
     return {
-      level: this.level,
-      isOn: this.isOn,
+      level: this.isOn ? this.level : 0,
+      state: this.isOn,
+      lastDaliLevel: this.level,
       config: this.pConf
     }
   }
@@ -253,7 +261,7 @@ class FoxtronDaliBallast {
     this.fadeStartLevel = (typeof lvl === 'undefined') ? 0 : lvl
 
     if (this.fadeAction !== FadeAction.None) {
-      this.fadeLoopTick()
+      setTimeout(this.fadeLoopTick.bind(this), 1)
       this.fadeLoopInterval = setInterval(
         this.fadeLoopTick.bind(this), 
         DALI_FADE_STEP_DURATION_MS
@@ -266,10 +274,14 @@ class FoxtronDaliBallast {
     // Refresh state from the context
     this.refreshState()
 
+    console.log(msg)
+
     // Event might be in topic or in payload, some events might have value. It's in 
     // payload or payload.value.
-    const event = eventWithString(msg.topic || msg.payload)
+    const event = eventWithString(msg.payload)
     const value: number | null = event === Event.SetLevel ? intWithPayload(msg.payload) : null
+
+    console.log(`event ${event}, value ${value}`)
 
     // Handle event
     switch (event) {
@@ -336,6 +348,8 @@ class FoxtronDaliBallast {
         this.pConf.levelBounds.min, 
         this.fadeStartLevel - Math.round(this.pConf.fadeLevelPerStep * this.fadeStepCntr)
       )
+      console.log(`step ${this.fadeStepCntr}, level ${this.level}, orig ${origLevel}`)
+      console.log(this.pConf.levelBounds)
       if (origLevel > this.pConf.levelBounds.min) {
         this.sendToBallast({
           opcode: Opcode.DOWN,
@@ -441,6 +455,7 @@ class FoxtronDaliBallast {
   // Set ballast to the state stored in context.
   // Usefull usually after the flow has begun to sync ballast with node state.
   resetBallastState(send: SendMsg) {
+    console.log(`Reset ballast`)
     this.stopFade(send)
   
     if (!this.isOn) {
@@ -461,6 +476,7 @@ class FoxtronDaliBallast {
   // Difference between cmd Off/Max and setLevel is the transition to level set by setLevel is 
   // smooth (uses DALI Fade Time) where Off/Max is instant.
   private setLevel = (val: number, send: SendMsg) => {
+    console.log(`Set level ${val}`)
     if (this.stopFade(send)) {
       return
     }

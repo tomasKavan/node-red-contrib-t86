@@ -51,7 +51,7 @@ class PushDimmer {
 
   private ballastState?: {
     level: number
-    isOn: boolean,
+    state: boolean,
     min: number,
     max: number
   }
@@ -75,7 +75,7 @@ class PushDimmer {
     if (
       msg && msg.payload 
       && typeof msg.payload.level === 'number' 
-      && typeof msg.payload.isOn === 'boolean' 
+      && typeof msg.payload.state === 'boolean' 
       && msg.payload.config 
       && msg.payload.config.levelBounds 
       && typeof msg.payload.config.levelBounds.min === 'number' 
@@ -83,7 +83,7 @@ class PushDimmer {
     ) {
       this.ballastState = {
         level: msg.payload.level,
-        isOn: msg.payload.isOn,
+        state: msg.payload.state,
         min: msg.payload.config.levelBounds.min,
         max: msg.payload.config.levelBounds.max
       }
@@ -129,13 +129,17 @@ class PushDimmer {
 
   private sendDimmingMsg(msg: any, send: SendMsg) {
     if (!msg) msg = {}
-    msg.topic = this.dimming === Dimming.Off ? 'stop' : this.dimming
+    msg.payload = {
+      event: this.dimming === Dimming.Off ? 'stop' : this.dimming
+    }
     send(msg)
   }
 
   private sendToggleMsg(msg: any, send: SendMsg) {
     if (!msg) msg = {}
-    msg.topic = 'toggle'
+    msg.payload = {
+      event: 'toggle'
+    }
     send(msg)
   }
 

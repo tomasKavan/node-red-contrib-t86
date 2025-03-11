@@ -1,27 +1,32 @@
 <script setup lang="ts">
-import { ref, computed, inject, watch } from "vue"
+import { ref, computed, inject, watch, reactive } from "vue"
 import { useStore } from "vuex"
 
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome"
 import { library, icon } from "@fortawesome/fontawesome-svg-core"
 import { faLightbulb as solidLightbulb } from "@fortawesome/free-solid-svg-icons"
 import { faLightbulb as regularLightbulb } from "@fortawesome/free-regular-svg-icons"
-import { WProps } from "../dimm-light-types"
+import { WProps, WType } from "../dimm-light-types"
 
 library.add(solidLightbulb, regularLightbulb)
 
-const BRIGHTNESS_MIN = 0
-const BRIGHTNESS_MAX = 100
-const TEMPERATURE_MIN = 2700
-const TEMPERATURE_MAX = 4000
-const BRIGHTNESS_RANGE = BRIGHTNESS_MAX - BRIGHTNESS_MIN
+const TEMPERATURE_MIN = 2200
+const TEMPERATURE_MAX = 6000
 const TEMPERATURE_RANGE = TEMPERATURE_MAX - TEMPERATURE_MIN
+const UPDATE_DEBOUNCE_MS = 200
+const AFTER_DRAG_UPDATE_DELAY_MS = 500
+
+type State = {
+  state: boolean,
+  level: number,
+  temp: number
+}
 
 enum DragDirecton {
-  None,
-  NotDecided,
-  Horizontal,
-  Vertical
+  None = 'none',
+  NotDecided = 'notDecided',
+  Horizontal = 'horizontal',
+  Vertical = 'vertical'
 }
 
 type Point = {
@@ -34,11 +39,13 @@ type Rect = {
   height: number
 }
 
-type Begin = {
-  start: Point,
-  rect: Rect,
-  brightness: number,
-  temperature: number
+type DragState = {
+  direction: DragDirecton,
+  begin: {
+    start: Point,
+    rect: Rect,
+    ballast: State
+  }
 }
 
 type WState = {
@@ -52,145 +59,303 @@ const props = defineProps<{
   state: WState
 }>()
 
-const store = useStore()
-const lastMsg = computed(() => store.state.data.messages)
+// === helper methods ===
 
-watch(lastMsg, () => {
- console.log(lastMsg.value)
+const calcDeltaOfEvent = (event: MouseEvent | TouchEvent): Point => {
+  const xt = "touches" in event ? event.touches[0].clientX : event.clientX
+  const yt = "touches" in event ? event.touches[0].clientY : event.clientY
+  const x = dragging.value.begin.start.x - xt
+  const y = dragging.value.begin.start.y - yt
+  return { x, y }
+}
+
+const createEmptyState = (): State => {
+  return { state: true, level: 50, temp: TEMPERATURE_MIN }
+}
+
+const createEmptyDragbeginState = (): DragState => {
+  return {
+    direction: DragDirecton.None,
+    begin: {
+      start: { x: 0, y: 0 },
+      rect: { width: 0, height: 0 },
+      ballast: createEmptyState()
+    }
+  }
+}
+
+const scheduleDragGraceTo = () => {
+  clearDragGraceTo()
+  dragGraceTo.value = setTimeout(onDragGraceTo, AFTER_DRAG_UPDATE_DELAY_MS)
+}
+
+const clearDragGraceTo = () => {
+  if (dragGraceTo.value) {
+    clearTimeout(dragGraceTo.value)
+  }
+  dragGraceTo.value = undefined
+}
+
+const levelToPercent = (lvl: number) => {
+  const range = props.props.brightnessMax - props.props.brightnessMin
+  const norm = lvl - props.props.brightnessMin
+  const ratio = norm / range
+  return Math.round(ratio * 100)
+}
+
+// ===
+
+const store = useStore()
+const dataState: any = inject('$dataTracker')
+const socket: any = inject('$socket')
+
+// ===
+dataState(props.id)
+
+// === Computed variables === 
+
+
+const lastMsg = ref<any>(undefined)
+watch (store.state.data, () => {
+  lastMsg.value = store.state.data.messages[props.id]
 })
 
-const dataState: any = inject('$dataTracker')
-
-const brightness = ref<number>(50) // Default 50% brightness
-const temperature = ref<number>(3000) // Default temperature
-const dragging = ref<DragDirecton>(DragDirecton.None)
-const begin = ref<Begin | null>(null)
+// === Reactive variables === 
+const ballastState = ref<State>(createEmptyState())
+const actionState = ref<State>(createEmptyState())
+const dragging = ref<DragState>(createEmptyDragbeginState())
+const dragGraceTo = ref<ReturnType<typeof setTimeout> | undefined>(undefined)
+const lastActionSendAt = ref<Date>(new Date)
 const dimmerBarElt = ref<HTMLElement | null>(null)
 
+// === User interface computed variables ===
+const visualState = computed<State>(() => {
+  if (dragging.value.direction === DragDirecton.None && !dragGraceTo.value) {
+    return reactive(ballastState.value)
+  }
+  return reactive(actionState.value)
+})
+
+// Icon of the lightbulb based on state
 const lightbulbIcon = computed<string[]>(() => {
-  return brightness.value > 0 ? ['fas', 'lightbulb'] : ['far', 'lightbulb']
+  return visualState.value.state ? ['fas', 'lightbulb'] : ['far', 'lightbulb']
 })
 
-const tempColor = computed<string>(() => {
-  const ratio = (temperature.value - TEMPERATURE_MIN) / TEMPERATURE_RANGE
-  const r = Math.round(255 * (1 - ratio) + 173 * ratio)
-  const g = Math.round(193 * (1 - ratio) + 216 * ratio)
-  const b = Math.round(67 * (1 - ratio) + 255 * ratio)
-  return `rgb(${r},${g},${b})`
+// Color of the bar filler for temp based
+const tempColor = ref<string>('#ffffff')
+const updateColor = () => {
+  let ratio = (2700 - TEMPERATURE_MIN) / TEMPERATURE_RANGE
+
+  if (props.props.wtype === WType.DimmTemp || props.props.wtype === WType.OnOffTemp) {
+    const t = Math.min(TEMPERATURE_MAX, Math.max(visualState.value.temp, TEMPERATURE_MAX))
+    const p = (t - TEMPERATURE_MIN) / TEMPERATURE_RANGE
+    ratio = Math.max(0, Math.min(1, p))
+  }
+  const r = Math.min(255, Math.max(173, Math.round(255 * (1 - ratio) + 173 * ratio)))
+  const g = Math.min(216, Math.max(193, Math.round(193 * (1 - ratio) + 216 * ratio)))
+  const b = Math.min(255, Math.max(67, Math.round(67 * (1 - ratio) + 255 * ratio)))
+  tempColor.value = `rgb(${r},${g},${b})`
+}
+watch (() => visualState.value.temp, updateColor)
+updateColor()
+
+// Height of the filler
+const fillHeight = ref<string>('0')
+watch ([() => visualState.value.level, () => visualState.value.state], () => {
+  let h = 0
+  if (props.props.wtype === WType.Dimm || props.props.wtype === WType.DimmTemp) {
+    h = visualState.value.state ? levelToPercent(visualState.value.level) : 0
+  } 
+  return fillHeight.value = h.toString()
 })
 
-function updateDrag(event: MouseEvent | TouchEvent) {
-  switch (dragging.value) {
+// === Watchers ===
+// update ballast state - new state message arrived
+watch(() => lastMsg.value, () => {
+  if (lastMsg.value && lastMsg.value.payload) {
+    ballastState.value = {
+      state: !!lastMsg.value.payload.state,
+      level: lastMsg.value.payload.level || props.props.brightnessMin,
+      temp: lastMsg.value.payload.temp || TEMPERATURE_MIN
+    }
+  }
+})
+
+// === Events ===
+
+const onDragStart = (event: MouseEvent | TouchEvent) => {
+  if (!dimmerBarElt.value) return
+
+  clearDragGraceTo()
+  const rect = dimmerBarElt.value.getBoundingClientRect()
+
+  dragging.value = {
+    direction: DragDirecton.NotDecided,
+    begin: {
+      start : { 
+        x: 'touches' in event ? event.touches[0].clientX : event.clientX,
+        y: 'touches' in event ? event.touches[0].clientY : event.clientY
+      },
+      rect,
+      ballast: {
+        state: ballastState.value.state,
+        level: ballastState.value.level,
+        temp: ballastState.value.temp
+      }
+    }
+  }
+
+  actionState.value = {
+    state: ballastState.value.state,
+    level: ballastState.value.level,
+    temp: ballastState.value.temp
+  }
+
+  document.addEventListener("mousemove", onDragUpdate)
+  document.addEventListener("mouseup", onDragEnded)
+  document.addEventListener("touchmove", onDragUpdate)
+  document.addEventListener("touchend", onDragEnded)
+}
+
+const onDragUpdate = (event: MouseEvent | TouchEvent) => {
+  switch (dragging.value.direction) {
     case DragDirecton.None: return
-    case DragDirecton.NotDecided: lockDragDirection(event); // Don't break! We want to start react immediately
+    case DragDirecton.NotDecided: decideDragDirection(event); // Don't break here! We want to start react immediately
     case DragDirecton.Horizontal: updateTemperature(event); break
     case DragDirecton.Vertical: updateBrightness(event); break
   }
 }
 
-function lockDragDirection(event: MouseEvent | TouchEvent) {
-  if (!begin.value) return
+const onDragEnded = (event: MouseEvent | TouchEvent) => {
+  // If direction wasn't decided, it's click/press.
+  // If type is On/Off, we fire toggle.
+  // Else we control dimming (level)
+  if (dragging.value.direction === DragDirecton.NotDecided) {
+    if (props.props.wtype === WType.OnOff || props.props.wtype === WType.OnOffTemp) {
+      actionState.value.state = !ballastState.value.state
+    } else {
+      const yt = "touches" in event ? event.touches[0].clientY : event.clientY
+      const rect = dimmerBarElt.value?.getBoundingClientRect()
+      let locYt = yt - (rect?.top || 0)
+      let ratio = 1 - (Math.abs(locYt) / (rect?.height || 1))
+      let level = props.props.brightnessMin + Math.round((props.props.brightnessMax - props.props.brightnessMin) * ratio)
+      actionState.value.state = ratio > 0.1
+      if (ratio > 0.9) {
+        level = props.props.brightnessMax
+      }
+      actionState.value.level = actionState.value.state ? level : props.props.brightnessMin
+    }
+  }
+  
+  onUpdateActionState(true)
+  scheduleDragGraceTo()
+  dragging.value = createEmptyDragbeginState()
 
-  const x = "touches" in event ? event.touches[0].clientX : event.clientX;
-  const y = "touches" in event ? event.touches[0].clientY : event.clientY;
-  const deltaX = Math.abs(begin.value.start.x - x);
-  const deltaY = Math.abs(begin.value.start.y - y);
-
-  // Lock drag to vertical or horizontal based on initial movement
-  dragging.value = deltaX > deltaY ? DragDirecton.Horizontal : DragDirecton.Vertical
+  document.removeEventListener("mousemove", onDragUpdate)
+  document.removeEventListener("mouseup", onDragEnded)
+  document.removeEventListener("touchmove", onDragUpdate)
+  document.removeEventListener("touchend", onDragEnded)
 }
 
-function updateTemperature(event: MouseEvent | TouchEvent) {
-  if (!begin.value) return
+const onUpdateActionState = (force?: boolean) => {
+  const date = new Date()
+  if (date.getTime() - lastActionSendAt.value.getTime() > UPDATE_DEBOUNCE_MS) {
+    const payload = {
+      event: 'set',
+      value: {
+        level: actionState.value.state ? props.props.brightnessMax : 0,
+        state: actionState.value.state,
+        temp: 0
+      }
+    }
+    if (props.props.wtype === WType.Dimm || props.props.wtype === WType.DimmTemp) {
+      payload.value.level = actionState.value.level
+    }
+    if (props.props.wtype === WType.DimmTemp || props.props.wtype === WType.OnOffTemp) {
+      payload.value.temp = actionState.value.temp
+    }
+    // Send only if the state differs from the one saved in ballast
+    if (
+      payload.value.state !== ballastState.value.state ||
+      payload.value.level !== ballastState.value.level ||
+      payload.value.temp !== ballastState.value.temp
+    ) {
+      socket.emit('widget-change', props.id, { payload })
+    }
+    lastActionSendAt.value = date
+  }
+}
+watch(actionState.value, () => { onUpdateActionState() })
 
-  const x = 'touches' in event ? event.touches[0].clientX : event.clientX
-  const deltaX = begin.value.start.x - x
-  const newTemp = Math.max(
+const onDragGraceTo = () => {
+  clearDragGraceTo()
+}
+
+// === Drag handle functions ===
+
+const decideDragDirection = (event: MouseEvent | TouchEvent) => {
+  const delta = calcDeltaOfEvent(event)
+
+  // In case of on/off button there is no need to lock - only push/click is available
+  if (props.props.wtype === WType.OnOff) return
+
+  if (delta.y === 0 && delta.x === 0) return
+
+  // Lock drag to vertical or horizontal based on initial movement
+  // If wtype is dimmable and temp we need to decide. Otherwise we decide based on wtype
+  if (props.props.wtype === WType.DimmTemp) {
+    dragging.value.direction = Math.abs(delta.x) > Math.abs(delta.y)
+    ? DragDirecton.Horizontal
+    : DragDirecton.Vertical
+  } else if (props.props.wtype === WType.OnOffTemp) {
+    dragging.value.direction = DragDirecton.Horizontal
+  } else {
+    dragging.value.direction = DragDirecton.Vertical
+  }
+}
+
+const updateTemperature = (event: MouseEvent | TouchEvent) => {
+  const delta = calcDeltaOfEvent(event)
+  const ratio = delta.x / dragging.value.begin.rect.width
+  actionState.value.temp = Math.max(
     TEMPERATURE_MIN,
     Math.min(
       TEMPERATURE_MAX, 
-      begin.value.temperature + (deltaX / begin.value.rect.width) * TEMPERATURE_RANGE)
+      dragging.value.begin.ballast.temp - Math.round(
+         ratio * TEMPERATURE_RANGE
+      ))
   )
-  temperature.value = newTemp
 }
 
-function updateBrightness(event: MouseEvent | TouchEvent) {
-  if (!begin.value) return
-
-  const y = 'touches' in event ? event.touches[0].clientY : event.clientY
-  const deltaY = begin.value.start.y - y
-  const newBrightness = Math.max(
-    BRIGHTNESS_MIN,
-    Math.min( 
-      BRIGHTNESS_MAX, 
-      begin.value.brightness + (deltaY / begin.value.rect.height) * BRIGHTNESS_RANGE 
-    )
+const updateBrightness = (event: MouseEvent | TouchEvent) => {
+  const delta = calcDeltaOfEvent(event)
+  const lvl = dragging.value.begin.ballast.level + Math.round(
+    delta.y / dragging.value.begin.rect.height
+    * (props.props.brightnessMax - props.props.brightnessMin)
   )
-  brightness.value = Math.round(newBrightness)
+
+  actionState.value.level = Math.max(
+    props.props.brightnessMin, 
+    Math.min(props.props.brightnessMax, lvl)
+  )
+  actionState.value.state = !(!lvl || lvl < props.props.brightnessMin)
 }
-
-function startDragging(event: MouseEvent | TouchEvent) {
-  if (!dimmerBarElt.value) return
-  
-  const rect = dimmerBarElt.value.getBoundingClientRect()
-
-  begin.value = {
-    start: { 
-      x: 'touches' in event ? event.touches[0].clientX : event.clientX,
-      y: 'touches' in event ? event.touches[0].clientY : event.clientY
-    },
-    rect,
-    brightness: brightness.value,
-    temperature: temperature.value
-  }
-  dragging.value = DragDirecton.NotDecided
-
-  document.addEventListener("mousemove", updateDrag)
-  document.addEventListener("mouseup", stopDragging)
-  document.addEventListener("touchmove", updateDrag)
-  document.addEventListener("touchend", stopDragging)
-}
-
-function stopDragging() {
-  dragging.value = DragDirecton.None
-  begin.value = null
-
-  document.removeEventListener("mousemove", updateDrag)
-  document.removeEventListener("mouseup", stopDragging)
-  document.removeEventListener("touchmove", updateDrag)
-  document.removeEventListener("touchend", stopDragging)
-}
-
-const onInput = (msg: any) => {
-  console.log(`Input: ${JSON.stringify(msg)}`)
-}
-
-const onLoad = (msg: any, state: any) => {
-  console.log(`Load msg: ${msg && JSON.stringify(msg)}, state: ${state}`)
-}
-
-const onDynProps = (msg: any) => {
-
-  console.log(`Dyn props: ${JSON.stringify(msg)}`)
-}
-
-dataState(props.id, onInput, onLoad, onDynProps)
 
 </script>
 
 <template>
   <div class="dimmer-widget">
     <div class="name">{{ props.props.label }}</div>
-    <div class="status">{{ brightness }}%</div>
+    <div class="status">{{ levelToPercent(visualState.level) }}%</div>
     <div 
       class="dimmer-bar" 
       ref="dimmerBarElt"
-      @mousedown="startDragging" 
-      @touchstart="startDragging"
+      @mousedown="onDragStart" 
+      @touchstart="onDragStart"
     >
       <div 
         class="dimmer-fill" 
-        :style="{ height: brightness + '%', backgroundColor: tempColor }"
+        :style="{ height: fillHeight + '%', backgroundColor: tempColor }"
       ></div>
       <FontAwesomeIcon 
         :icon="lightbulbIcon" 
@@ -205,9 +370,11 @@ dataState(props.id, onInput, onLoad, onDynProps)
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 80px;
+  width: 100%;
+  min-width: 60px;
+  height: 100%;
+  min-height: 200px;
   user-select: none;
-  font-family: sans-serif;
 }
 
 .lightbulb-icon {
@@ -224,14 +391,13 @@ dataState(props.id, onInput, onLoad, onDynProps)
 }
 
 .dimmer-bar {
-  width: 80px;
-  height: 200px;
+  min-width: 60px;
+  min-height: 120px;
   border-radius: 15px;
   background: linear-gradient(to bottom, #444, #111);
   position: relative;
   overflow: hidden;
   touch-action: none;
-  margin-top: 30px;
 }
 
 .dimmer-fill {
@@ -252,5 +418,6 @@ dataState(props.id, onInput, onLoad, onDynProps)
   margin-top: 4px;
   font-size: 12px;
   color: lightgray;
+  margin-bottom: 20px;
 }
 </style>
