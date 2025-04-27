@@ -1,0 +1,1 @@
+export { default as DimmLight } from './DoorLock.vue'

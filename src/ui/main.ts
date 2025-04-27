@@ -1,6 +1,6 @@
 import { createApp } from 'vue'
 
-import DimmLight from './DimmLight.vue'
+import DimmLight from './ui-dimm-light/DimmLight.vue'
 
 createApp(DimmLight, {
   id: 'aaaa',

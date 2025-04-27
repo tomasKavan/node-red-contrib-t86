@@ -6,7 +6,7 @@ import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome"
 import { library, icon } from "@fortawesome/fontawesome-svg-core"
 import { faLightbulb as solidLightbulb } from "@fortawesome/free-solid-svg-icons"
 import { faLightbulb as regularLightbulb } from "@fortawesome/free-regular-svg-icons"
-import { WProps, WType } from "../dimm-light-types"
+import { WProps, WType } from "../../dimm-light-types"
 
 library.add(solidLightbulb, regularLightbulb)
 
@@ -26,7 +26,8 @@ enum DragDirecton {
   None = 'none',
   NotDecided = 'notDecided',
   Horizontal = 'horizontal',
-  Vertical = 'vertical'
+  Vertical = 'vertical',
+  Invalid = 'invalid'
 }
 
 type Point = {
@@ -84,6 +85,8 @@ const createEmptyDragbeginState = (): DragState => {
   }
 }
 
+// It keeps visualState on actionState and wait for ballast to respond with new levels.
+// See condition in visualState computed property definition.
 const scheduleDragGraceTo = () => {
   clearDragGraceTo()
   dragGraceTo.value = setTimeout(onDragGraceTo, AFTER_DRAG_UPDATE_DELAY_MS)
@@ -101,6 +104,10 @@ const levelToPercent = (lvl: number) => {
   const norm = lvl - props.props.brightnessMin
   const ratio = norm / range
   return Math.round(ratio * 100)
+}
+
+const statusToText = (status: boolean) => {
+  return status ? 'ON' : 'OFF'
 }
 
 // ===
@@ -136,6 +143,13 @@ const visualState = computed<State>(() => {
   return reactive(actionState.value)
 })
 
+const switchTop = computed<string>(() => {
+  if (visualState.value.state) {
+    return '0%'
+  }
+  return 'calc(60% - 16px)'
+})
+
 // Icon of the lightbulb based on state
 const lightbulbIcon = computed<string[]>(() => {
   return visualState.value.state ? ['fas', 'lightbulb'] : ['far', 'lightbulb']
@@ -146,7 +160,7 @@ const tempColor = ref<string>('#ffffff')
 const updateColor = () => {
   let ratio = (2700 - TEMPERATURE_MIN) / TEMPERATURE_RANGE
 
-  if (props.props.wtype === WType.DimmTemp || props.props.wtype === WType.OnOffTemp) {
+  if (props.props.wtype === WType.DimmTemp) {
     const t = Math.min(TEMPERATURE_MAX, Math.max(visualState.value.temp, TEMPERATURE_MAX))
     const p = (t - TEMPERATURE_MIN) / TEMPERATURE_RANGE
     ratio = Math.max(0, Math.min(1, p))
@@ -223,6 +237,7 @@ const onDragUpdate = (event: MouseEvent | TouchEvent) => {
     case DragDirecton.NotDecided: decideDragDirection(event); // Don't break here! We want to start react immediately
     case DragDirecton.Horizontal: updateTemperature(event); break
     case DragDirecton.Vertical: updateBrightness(event); break
+    case DragDirecton.Invalid: cancelDrag(); break // Drag is not allowed, but happend. Cancel drag without any action.
   }
 }
 
@@ -231,8 +246,9 @@ const onDragEnded = (event: MouseEvent | TouchEvent) => {
   // If type is On/Off, we fire toggle.
   // Else we control dimming (level)
   if (dragging.value.direction === DragDirecton.NotDecided) {
-    if (props.props.wtype === WType.OnOff || props.props.wtype === WType.OnOffTemp) {
+    if (props.props.wtype === WType.OnOff) {
       actionState.value.state = !ballastState.value.state
+      actionState.value.level = actionState.value.state ? props.props.brightnessMax : 0
     } else {
       const yt = "touches" in event ? event.touches[0].clientY : event.clientY
       const rect = dimmerBarElt.value?.getBoundingClientRect()
@@ -249,17 +265,12 @@ const onDragEnded = (event: MouseEvent | TouchEvent) => {
   
   onUpdateActionState(true)
   scheduleDragGraceTo()
-  dragging.value = createEmptyDragbeginState()
-
-  document.removeEventListener("mousemove", onDragUpdate)
-  document.removeEventListener("mouseup", onDragEnded)
-  document.removeEventListener("touchmove", onDragUpdate)
-  document.removeEventListener("touchend", onDragEnded)
+  cancelDrag()
 }
 
 const onUpdateActionState = (force?: boolean) => {
   const date = new Date()
-  if (date.getTime() - lastActionSendAt.value.getTime() > UPDATE_DEBOUNCE_MS) {
+  if (date.getTime() - lastActionSendAt.value.getTime() > UPDATE_DEBOUNCE_MS || force) {
     const payload = {
       event: 'set',
       value: {
@@ -271,9 +282,10 @@ const onUpdateActionState = (force?: boolean) => {
     if (props.props.wtype === WType.Dimm || props.props.wtype === WType.DimmTemp) {
       payload.value.level = actionState.value.level
     }
-    if (props.props.wtype === WType.DimmTemp || props.props.wtype === WType.OnOffTemp) {
+    if (props.props.wtype === WType.DimmTemp) {
       payload.value.temp = actionState.value.temp
     }
+
     // Send only if the state differs from the one saved in ballast
     if (
       payload.value.state !== ballastState.value.state ||
@@ -297,7 +309,10 @@ const decideDragDirection = (event: MouseEvent | TouchEvent) => {
   const delta = calcDeltaOfEvent(event)
 
   // In case of on/off button there is no need to lock - only push/click is available
-  if (props.props.wtype === WType.OnOff) return
+  if (props.props.wtype === WType.OnOff) {
+    dragging.value.direction = DragDirecton.Invalid
+    return 
+  }
 
   if (delta.y === 0 && delta.x === 0) return
 
@@ -307,8 +322,6 @@ const decideDragDirection = (event: MouseEvent | TouchEvent) => {
     dragging.value.direction = Math.abs(delta.x) > Math.abs(delta.y)
     ? DragDirecton.Horizontal
     : DragDirecton.Vertical
-  } else if (props.props.wtype === WType.OnOffTemp) {
-    dragging.value.direction = DragDirecton.Horizontal
   } else {
     dragging.value.direction = DragDirecton.Vertical
   }
@@ -341,12 +354,22 @@ const updateBrightness = (event: MouseEvent | TouchEvent) => {
   actionState.value.state = !(!lvl || lvl < props.props.brightnessMin)
 }
 
+const cancelDrag = () => {
+  dragging.value = createEmptyDragbeginState()
+
+  document.removeEventListener("mousemove", onDragUpdate)
+  document.removeEventListener("mouseup", onDragEnded)
+  document.removeEventListener("touchmove", onDragUpdate)
+  document.removeEventListener("touchend", onDragEnded)
+}
+
 </script>
 
 <template>
   <div class="dimmer-widget">
     <div class="name">{{ props.props.label }}</div>
-    <div class="status">{{ levelToPercent(visualState.level) }}%</div>
+    <div class="status" v-if="props.props.wtype !== WType.OnOff">{{ visualState.state ? levelToPercent(visualState.level) + '%' : 'OFF' }}</div>
+    <div class="status" v-else>{{ statusToText(visualState.state) }}</div>
     <div 
       class="dimmer-bar" 
       ref="dimmerBarElt"
@@ -354,13 +377,26 @@ const updateBrightness = (event: MouseEvent | TouchEvent) => {
       @touchstart="onDragStart"
     >
       <div 
+        v-if="props.props.wtype !== WType.OnOff"
         class="dimmer-fill" 
         :style="{ height: fillHeight + '%', backgroundColor: tempColor }"
       ></div>
       <FontAwesomeIcon 
+        v-if="props.props.wtype !== WType.OnOff"
         :icon="lightbulbIcon" 
         class="lightbulb-icon">
       </FontAwesomeIcon>
+
+      <div 
+        v-if="props.props.wtype === WType.OnOff"
+        class="dimmer-switch" 
+        :style="{ top: switchTop }"
+      >
+        <FontAwesomeIcon 
+          :icon="lightbulbIcon" 
+          class="lightbulb-icon">
+        </FontAwesomeIcon>
+      </div>
     </div>
   </div>
 </template>
@@ -378,13 +414,13 @@ const updateBrightness = (event: MouseEvent | TouchEvent) => {
 }
 
 .lightbulb-icon {
-  font-size: 32px;
+  font-size: 28px;
   transition: color 0.3s ease-in-out;
   position:absolute;
   bottom: 20px;
   left: 50%;
   width: 40px;
-  height: 40px;
+  height: 32px;
   display: block;
   margin-left: -20px;
   color: white;
@@ -406,6 +442,22 @@ const updateBrightness = (event: MouseEvent | TouchEvent) => {
   width: 100%;
   transition: height 0.1s ease-out;
   background-color: rgb(255, 204, 0);
+}
+
+.dimmer-switch {
+  position: absolute;
+  width: calc(100% - 16px);
+  left: 8px;
+  height: 40%;
+  margin-top: 8px;
+  transition: top 0.1s ease-out;
+  background-color: rgb(255, 204, 0);
+  border-radius: 10px;
+}
+
+.dimmer-switch .lightbulb-icon {
+  top: 8px;
+  height: 32px;
 }
 
 .name {

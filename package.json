@@ -13,17 +13,19 @@
   "license": "BSD-2-Clause",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tomasKavan/node-red-contrib-foxtron-dali"
+    "url": "https://github.com/tomasKavan/node-red-contrib-t86"
   },
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc && npm run copy-html && npm run copy-css",
+    "build": "npm run build-ui && tsc && npm run copy-html && npm run copy-css",
     "copy-html": "copyfiles -u 1 \"src/**/*.html\" dist/",
     "copy-css": "copyfiles -u 1 \"src/**/*.css\" dist/",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write src",
     "test": "jest",
-    "prepare": "npm run build"
+    "build-ui-door-lock": "npx vite build --config ./src/ui/ui-door-lock/vite.config.mjs",
+    "build-ui-dimm-light": "npx vite build --config ./src/ui/ui-dimm-light/vite.config.mjs",
+    "build-ui": "npm run build-ui-door-lock && npm run build-ui-dimm-light"
   },
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "^6.7.2",
@@ -61,6 +63,10 @@
       "ui-dimm-light": {
         "output": "ui-dimm-light.umd.js",
         "component": "DimmLight"
+      },
+      "ui-door-lock": {
+        "output": "ui-door-lock.umd.js",
+        "component": "DoorLock"
       }
     }
   }

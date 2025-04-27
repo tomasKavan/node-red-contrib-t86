@@ -4,7 +4,6 @@ export enum WType {
   OnOff = 'onoff',
   Dimm = 'dimm',
   DimmTemp = 'dimm.temp',
-  OnOffTemp = 'onoff.temp'
 }
 
 export interface WProps extends NodeDef {
