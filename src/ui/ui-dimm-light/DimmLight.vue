@@ -161,14 +161,16 @@ const updateColor = () => {
   let ratio = (2700 - TEMPERATURE_MIN) / TEMPERATURE_RANGE
 
   if (props.props.wtype === WType.DimmTemp) {
-    const t = Math.min(TEMPERATURE_MAX, Math.max(visualState.value.temp, TEMPERATURE_MAX))
+    const t = Math.min(TEMPERATURE_MAX, Math.max(visualState.value.temp, TEMPERATURE_MIN))
     const p = (t - TEMPERATURE_MIN) / TEMPERATURE_RANGE
     ratio = Math.max(0, Math.min(1, p))
   }
+  //console.log(visualState.value.temp + " " + )
   const r = Math.min(255, Math.max(173, Math.round(255 * (1 - ratio) + 173 * ratio)))
   const g = Math.min(216, Math.max(193, Math.round(193 * (1 - ratio) + 216 * ratio)))
   const b = Math.min(255, Math.max(67, Math.round(67 * (1 - ratio) + 255 * ratio)))
   tempColor.value = `rgb(${r},${g},${b})`
+  console.log(tempColor.value)
 }
 watch (() => visualState.value.temp, updateColor)
 updateColor()
