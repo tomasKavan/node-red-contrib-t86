@@ -4,7 +4,7 @@
     color: '#a0e6ec',
     inputs: 1,
     outputs: 1,
-    icon: '../assets/node.svg',
+    icon: 'font-awesome/fa-lightbulb-o',
     defaults: {
       name: { value: ''},
       label: { value: ''},
@@ -22,8 +22,26 @@
         }
       },
       height: { value: 0 },
-      brightnessMin: { value: 0 },
-      brightnessMax: { value: 254 },
+      brightnessMin: { 
+        value: 0,
+        validate: function(v) {
+          v = parseInt(v)
+          if (isNaN(v)) return true
+          const maxEl = $("#node-input-brightnessMax")
+          const max = parseInt(maxEl ? maxEl.val() : '')
+          return v > 0 && v < 255 && (isNaN(max) || v > max)
+        }
+      },
+      brightnessMax: { 
+        value: 254,
+        validate: function(v) {
+          v = parseInt(v)
+          if (isNaN(v)) return true
+          const minEl = $("#node-input-brightnessMin")
+          const min = parseInt(minEl ? minEl.val() : '')
+          return v > 0 && v < 255 && (isNaN(min) || v > min)
+        }
+      },
       wtype: { value: 'dimm' },
       passthru: { value: true }
     },

@@ -60,6 +60,19 @@ const props = defineProps<{
   state: WState
 }>()
 
+// Fix of Node-RED inability to parse Node attributes as numbers
+const pProps = computed<WProps>(() => {
+  const res = {...props.props}
+
+  if (typeof res.brightnessMin === 'string') res.brightnessMin = parseInt(res.brightnessMin)
+  if (typeof res.brightnessMax === 'string') res.brightnessMax = parseInt(res.brightnessMax)
+  if (typeof res.order === 'string') res.order = parseInt(res.order)
+  if (typeof res.width === 'string') res.width = parseInt(res.width)
+  if (typeof res.height === 'string') res.height = parseInt(res.height)
+
+  return res
+})
+
 // === helper methods ===
 
 const calcDeltaOfEvent = (event: MouseEvent | TouchEvent): Point => {
@@ -100,10 +113,10 @@ const clearDragGraceTo = () => {
 }
 
 const levelToPercent = (lvl: number) => {
-  const range = props.props.brightnessMax - props.props.brightnessMin
-  const norm = lvl - props.props.brightnessMin
+  const range = pProps.value.brightnessMax - pProps.value.brightnessMin
+  const norm = lvl - pProps.value.brightnessMin
   const ratio = norm / range
-  return Math.round(ratio * 100)
+  return Math.min(100, Math.max(0, Math.round(ratio * 100)))
 }
 
 const statusToText = (status: boolean) => {
@@ -160,7 +173,7 @@ const tempColor = ref<string>('#ffffff')
 const updateColor = () => {
   let ratio = (2700 - TEMPERATURE_MIN) / TEMPERATURE_RANGE
 
-  if (props.props.wtype === WType.DimmTemp) {
+  if (pProps.value.wtype === WType.DimmTemp) {
     const t = Math.min(TEMPERATURE_MAX, Math.max(visualState.value.temp, TEMPERATURE_MIN))
     const p = (t - TEMPERATURE_MIN) / TEMPERATURE_RANGE
     ratio = Math.max(0, Math.min(1, p))
@@ -170,7 +183,6 @@ const updateColor = () => {
   const g = Math.min(216, Math.max(193, Math.round(193 * (1 - ratio) + 216 * ratio)))
   const b = Math.min(255, Math.max(67, Math.round(67 * (1 - ratio) + 255 * ratio)))
   tempColor.value = `rgb(${r},${g},${b})`
-  console.log(tempColor.value)
 }
 watch (() => visualState.value.temp, updateColor)
 updateColor()
@@ -179,7 +191,7 @@ updateColor()
 const fillHeight = ref<string>('0')
 watch ([() => visualState.value.level, () => visualState.value.state], () => {
   let h = 0
-  if (props.props.wtype === WType.Dimm || props.props.wtype === WType.DimmTemp) {
+  if (pProps.value.wtype === WType.Dimm || pProps.value.wtype === WType.DimmTemp) {
     h = visualState.value.state ? levelToPercent(visualState.value.level) : 0
   } 
   return fillHeight.value = h.toString()
@@ -191,7 +203,7 @@ watch(() => lastMsg.value, () => {
   if (lastMsg.value && lastMsg.value.payload) {
     ballastState.value = {
       state: !!lastMsg.value.payload.state,
-      level: lastMsg.value.payload.level || props.props.brightnessMin,
+      level: lastMsg.value.payload.level || pProps.value.brightnessMin,
       temp: lastMsg.value.payload.temp || TEMPERATURE_MIN
     }
   }
@@ -248,20 +260,20 @@ const onDragEnded = (event: MouseEvent | TouchEvent) => {
   // If type is On/Off, we fire toggle.
   // Else we control dimming (level)
   if (dragging.value.direction === DragDirecton.NotDecided) {
-    if (props.props.wtype === WType.OnOff) {
+    if (pProps.value.wtype === WType.OnOff) {
       actionState.value.state = !ballastState.value.state
-      actionState.value.level = actionState.value.state ? props.props.brightnessMax : 0
+      actionState.value.level = actionState.value.state ? pProps.value.brightnessMax : 0
     } else {
       const yt = "touches" in event ? event.touches[0].clientY : event.clientY
       const rect = dimmerBarElt.value?.getBoundingClientRect()
       let locYt = yt - (rect?.top || 0)
       let ratio = 1 - (Math.abs(locYt) / (rect?.height || 1))
-      let level = props.props.brightnessMin + Math.round((props.props.brightnessMax - props.props.brightnessMin) * ratio)
+      let level = pProps.value.brightnessMin + Math.round((pProps.value.brightnessMax - pProps.value.brightnessMin) * ratio)
       actionState.value.state = ratio > 0.1
       if (ratio > 0.9) {
-        level = props.props.brightnessMax
+        level = pProps.value.brightnessMax
       }
-      actionState.value.level = actionState.value.state ? level : props.props.brightnessMin
+      actionState.value.level = actionState.value.state ? level : pProps.value.brightnessMin
     }
   }
   
@@ -276,15 +288,15 @@ const onUpdateActionState = (force?: boolean) => {
     const payload = {
       event: 'set',
       value: {
-        level: actionState.value.state ? props.props.brightnessMax : 0,
+        level: actionState.value.state ? pProps.value.brightnessMax : 0,
         state: actionState.value.state,
         temp: 0
       }
     }
-    if (props.props.wtype === WType.Dimm || props.props.wtype === WType.DimmTemp) {
+    if (pProps.value.wtype === WType.Dimm || pProps.value.wtype === WType.DimmTemp) {
       payload.value.level = actionState.value.level
     }
-    if (props.props.wtype === WType.DimmTemp) {
+    if (pProps.value.wtype === WType.DimmTemp) {
       payload.value.temp = actionState.value.temp
     }
 
@@ -311,7 +323,7 @@ const decideDragDirection = (event: MouseEvent | TouchEvent) => {
   const delta = calcDeltaOfEvent(event)
 
   // In case of on/off button there is no need to lock - only push/click is available
-  if (props.props.wtype === WType.OnOff) {
+  if (pProps.value.wtype === WType.OnOff) {
     dragging.value.direction = DragDirecton.Invalid
     return 
   }
@@ -320,7 +332,7 @@ const decideDragDirection = (event: MouseEvent | TouchEvent) => {
 
   // Lock drag to vertical or horizontal based on initial movement
   // If wtype is dimmable and temp we need to decide. Otherwise we decide based on wtype
-  if (props.props.wtype === WType.DimmTemp) {
+  if (pProps.value.wtype === WType.DimmTemp) {
     dragging.value.direction = Math.abs(delta.x) > Math.abs(delta.y)
     ? DragDirecton.Horizontal
     : DragDirecton.Vertical
@@ -346,14 +358,15 @@ const updateBrightness = (event: MouseEvent | TouchEvent) => {
   const delta = calcDeltaOfEvent(event)
   const lvl = dragging.value.begin.ballast.level + Math.round(
     delta.y / dragging.value.begin.rect.height
-    * (props.props.brightnessMax - props.props.brightnessMin)
+    * (pProps.value.brightnessMax - pProps.value.brightnessMin)
+    + pProps.value.brightnessMin
   )
 
   actionState.value.level = Math.max(
-    props.props.brightnessMin, 
-    Math.min(props.props.brightnessMax, lvl)
+    pProps.value.brightnessMin, 
+    Math.min(pProps.value.brightnessMax, lvl)
   )
-  actionState.value.state = !(!lvl || lvl < props.props.brightnessMin)
+  actionState.value.state = !(!lvl || lvl < pProps.value.brightnessMin)
 }
 
 const cancelDrag = () => {
@@ -369,8 +382,8 @@ const cancelDrag = () => {
 
 <template>
   <div class="dimmer-widget">
-    <div class="name">{{ props.props.label }}</div>
-    <div class="status" v-if="props.props.wtype !== WType.OnOff">{{ visualState.state ? levelToPercent(visualState.level) + '%' : 'OFF' }}</div>
+    <div class="name">{{ pProps.label }}</div>
+    <div class="status" v-if="pProps.wtype !== WType.OnOff">{{ visualState.state ? levelToPercent(visualState.level) + '%' : 'OFF' }}</div>
     <div class="status" v-else>{{ statusToText(visualState.state) }}</div>
     <div 
       class="dimmer-bar" 
@@ -379,18 +392,18 @@ const cancelDrag = () => {
       @touchstart="onDragStart"
     >
       <div 
-        v-if="props.props.wtype !== WType.OnOff"
+        v-if="pProps.wtype !== WType.OnOff"
         class="dimmer-fill" 
         :style="{ height: fillHeight + '%', backgroundColor: tempColor }"
       ></div>
       <FontAwesomeIcon 
-        v-if="props.props.wtype !== WType.OnOff"
+        v-if="pProps.wtype !== WType.OnOff"
         :icon="lightbulbIcon" 
         class="lightbulb-icon">
       </FontAwesomeIcon>
 
       <div 
-        v-if="props.props.wtype === WType.OnOff"
+        v-if="pProps.wtype === WType.OnOff"
         class="dimmer-switch" 
         :style="{ top: switchTop }"
       >

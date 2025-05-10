@@ -1,7 +1,7 @@
 {
   "name": "node-red-dashboard-2-t86",
-  "version": "0.1.1",
-  "description": "A Node-RED node for DALI gear connected to Foxtron serial controllers.",
+  "version": "0.1.2",
+  "description": "Set of Node-RED nodes to controll home automation based on Unipi Patron and DALI.",
   "keywords": [
     "t86",
     "node-red",
