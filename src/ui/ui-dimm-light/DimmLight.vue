@@ -359,7 +359,6 @@ const updateBrightness = (event: MouseEvent | TouchEvent) => {
   const lvl = dragging.value.begin.ballast.level + Math.round(
     delta.y / dragging.value.begin.rect.height
     * (pProps.value.brightnessMax - pProps.value.brightnessMin)
-    + pProps.value.brightnessMin
   )
 
   actionState.value.level = Math.max(
